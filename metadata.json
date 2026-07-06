@@ -1,0 +1,6 @@
+{
+  "name": "TaskFlow AI",
+  "description": "TaskFlow AI is an Agentic Operating System (AOS) for deploying, managing, and auditing specialized autonomous AI development squads with deterministic contracts, budget circuit breakers, and human-in-the-loop validation gates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
