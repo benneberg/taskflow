@@ -117,6 +117,42 @@ function seedData() {
       tripCount: 0,
       totalWarnings: 0,
       status: "IDLE"
+    },
+    {
+      id: "agent-product-manager",
+      name: "Pat",
+      role: "Product Manager Agent",
+      toolWhitelist: ["requirements_analysis", "jira_specifier", "brief_compiler", "scope_validator"],
+      budgetTokens: 3000000,
+      budgetUsd: 3.50,
+      spentUsd: 0.15,
+      spentTokens: 45000,
+      fallbackChain: ["gemini-3.5-flash", "gemini-3.1-flash-lite", "mock-pm"],
+      model: "gemini-3.5-flash",
+      maxIterations: 5,
+      systemPrompt: "You are Pat, a strategic Product Manager agent. Your job is to analyze incoming raw task specifications, draft structured product briefs, align tools with scope boundaries, and define the high-level functional objectives of the sprint.",
+      circuitBreakerState: "CLOSED",
+      tripCount: 0,
+      totalWarnings: 0,
+      status: "IDLE"
+    },
+    {
+      id: "agent-ceo",
+      name: "Sam",
+      role: "CEO Agent",
+      toolWhitelist: ["strategic_signoff", "risk_assessor", "compliance_checker", "financial_approver"],
+      budgetTokens: 6000000,
+      budgetUsd: 6.00,
+      spentUsd: 0.50,
+      spentTokens: 110000,
+      fallbackChain: ["gemini-3.5-flash", "gemini-3.1-flash-lite", "mock-ceo"],
+      model: "gemini-3.5-flash",
+      maxIterations: 6,
+      systemPrompt: "You are Sam, the chief executive officer agent. Your role is to govern high-level strategic directives, perform financial gate sanity checks, authorize system deployment signals, and verify brand voice and market readiness.",
+      circuitBreakerState: "CLOSED",
+      tripCount: 0,
+      totalWarnings: 0,
+      status: "IDLE"
     }
   ];
 
@@ -172,7 +208,15 @@ export async function loginUser(req, res) {
   - [x] JWT expires in under 1 hour
   - [x] Cookie marked HttpOnly, Secure, SameSite=Strict
   - [x] Token rotation correctly revokes parent context on duplicate submission
-- **Status**: APPROVED. Excellent adherence to cryptographic and operational standards.`
+- **Status**: APPROVED. Excellent adherence to cryptographic and operational standards.`,
+      productBrief: `### Pat's Product Brief: User Authentication
+- **Objective**: Implement enterprise-grade JWT-based user session handling.
+- **Scope Limits**: Support standard refresh token rotation with zero client-side storage exposure of private keys.
+- **Persona Boundary**: Restrict database and crypto whitelists.`,
+      strategicSignoff: `### Sam's CEO Executive Alignment Review
+- **Strategic Value**: High. Crucial for customer confidence and data isolation standards.
+- **Financial Status**: Under budget. Safe for general deployment.
+- **Sign-off**: AUTHORIZED.`
     },
     {
       id: "task-seed-2",
@@ -213,7 +257,14 @@ export default function CosmicChat() {
 - **Aesthetic Validation**: Matches exact layout requirements. Smooth 60fps animations.
 - **Micro-interactions**: High visual fidelity. Proper focus-traps handled.
 - **Contrast Check**: AA compliance met for text over cosmic backdrop.
-- **Decision Gate**: Ready for human deployment sign-off.`
+- **Decision Gate**: Ready for human deployment sign-off.`,
+      productBrief: `### Pat's Product Brief: Interactive Chat Widget
+- **Objective**: Design and build a floating reactive chat widget matching the Cosmic Slate design system.
+- **Scope Limits**: Focus purely on front-end aesthetics, transitions, and local simulated feedback loops. No unrequested backends.`,
+      strategicSignoff: `### Sam's CEO Executive Alignment Review
+- **Strategic Value**: Medium. Enhances user experience engagement metrics by ~15%.
+- **Financial Status**: Within expectations. Good use of frontend budget.
+- **Sign-off**: APPROVED.`
     }
   ];
 
@@ -430,16 +481,30 @@ if (fs.existsSync(DATA_STORE_PATH)) {
   saveStateToDisk();
 }
 
+let isWriting = false;
+let pendingWrite = false;
+
 function saveStateToDisk() {
-  try {
-    fs.writeFileSync(
-      DATA_STORE_PATH,
-      JSON.stringify({ tasks, agents, events, gates, transactions, thermalConfig }, null, 2),
-      "utf8"
-    );
-  } catch (error) {
-    console.error("Failed to write state to disk:", error);
+  if (isWriting) {
+    pendingWrite = true;
+    return;
   }
+  isWriting = true;
+  fs.writeFile(
+    DATA_STORE_PATH,
+    JSON.stringify({ tasks, agents, events, gates, transactions, thermalConfig }, null, 2),
+    "utf8",
+    (err) => {
+      isWriting = false;
+      if (err) {
+        console.error("Failed to write state to disk:", err);
+      }
+      if (pendingWrite) {
+        pendingWrite = false;
+        saveStateToDisk();
+      }
+    }
+  );
 }
 
 // Global SSE connection registry for instant real-time broadcasts
@@ -528,6 +593,10 @@ function logTaskEvent(
   };
 
   events.push(newEvent);
+  // Keep event logs bounded to avoid memory leaks
+  if (events.length > 500) {
+    events = events.slice(events.length - 500);
+  }
   saveStateToDisk();
 
   // Instant real-time update
@@ -542,10 +611,11 @@ async function executeWorkflowStep(taskId: string) {
 
   // Let's figure out what status to process
   if (task.status === "CREATED") {
-    task.status = "PLANNING";
-    task.updatedAt = new Date().toISOString();
-    broadcastToClients("TASK_UPDATED", task);
-
+    logTaskEvent(taskId, "TASK_CREATED", null, { message: "Task initialized. Pat drafting product requirements brief." });
+    
+    // Start Pat's requirements draft phase
+    setTimeout(() => runProductBriefPhase(taskId), 3000);
+  } else if (task.status === "PLANNING") {
     logTaskEvent(taskId, "PLANNING_STARTED", "agent-backend-dev", { message: "Alex began creating technical plan." });
     
     // Asynchronous state loop simulation
@@ -896,7 +966,6 @@ async function runQAPhase(taskId: string) {
   agent.status = "IDLE";
 
   task.qaReview = generatedReview;
-  task.status = "AWAITING_APPROVAL";
   task.updatedAt = new Date().toISOString();
 
   // Budget transaction
@@ -910,6 +979,213 @@ async function runQAPhase(taskId: string) {
     timestamp: new Date().toISOString()
   });
 
+  recalculateThermalAndUsage();
+  saveStateToDisk();
+
+  broadcastToClients("AGENT_UPDATED", agent);
+  broadcastToClients("TASK_UPDATED", task);
+
+  logTaskEvent(taskId, "QA_COMPLETED", "agent-qa-reviewer", {
+    message: "Security and layout validators reports passed. Handing over to Sam (CEO) for strategic review."
+  });
+
+  // Trigger Sam (CEO) strategic review
+  setTimeout(() => runCeoSignoffPhase(taskId), 3000);
+}
+
+// PRODUCT BRIEF PHASE execution (Pat)
+async function runProductBriefPhase(taskId: string) {
+  const task = tasks.find(t => t.id === taskId);
+  const agent = agents.find(a => a.id === "agent-product-manager");
+  if (!task || !agent) return;
+
+  if (agent.circuitBreakerState === "OPEN") {
+    task.status = "ESCALATED";
+    task.updatedAt = new Date().toISOString();
+    broadcastToClients("TASK_UPDATED", task);
+    logTaskEvent(taskId, "TEST_FAILED", "agent-product-manager", { error: "Pat's Circuit Breaker is OPEN." });
+    return;
+  }
+
+  agent.status = "WORKING";
+  broadcastToClients("AGENT_UPDATED", agent);
+
+  let generatedBrief = "";
+  let promptCost = 0.15;
+  let tokensConsumed = 45000;
+
+  if (thermalConfig.throttleLevel === "moderate" || thermalConfig.throttleLevel === "severe") {
+    promptCost = 0.05;
+    tokensConsumed = 15000;
+  }
+
+  if (agent.spentUsd + promptCost > agent.budgetUsd) {
+    agent.circuitBreakerState = "OPEN";
+    agent.status = "TRIPPED";
+    agent.tripCount += 1;
+    agent.spentUsd = Number((agent.spentUsd + promptCost).toFixed(4));
+    agent.spentTokens += tokensConsumed;
+
+    task.status = "ESCALATED";
+    task.updatedAt = new Date().toISOString();
+
+    recalculateThermalAndUsage();
+    saveStateToDisk();
+
+    broadcastToClients("AGENT_UPDATED", agent);
+    broadcastToClients("TASK_UPDATED", task);
+
+    logTaskEvent(taskId, "CIRCUIT_BREAKER_TRIPPED", "agent-product-manager", {
+      agentName: agent.name,
+      allocated: agent.budgetUsd,
+      spent: agent.spentUsd,
+      message: "Allocated threshold breached during requirements drafting."
+    });
+    return;
+  }
+
+  // Generate the brief via real Gemini or fallback
+  if (ai) {
+    try {
+      logTaskEvent(taskId, "THOUGHT_LOG", "agent-product-manager", {
+        monologue: "Pat scanning incoming scope parameters to formulate functional boundaries and agile brief..."
+      });
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: `Create a professional product brief for the task: "${task.title}". Context: "${task.description}". Keep it very concise (under 120 words), using Markdown formatting with sections: "Strategic Objective", "Scope Limits", and "Required Tools".`,
+      });
+      generatedBrief = response.text || "Failed to generate product brief.";
+    } catch (e) {
+      console.error("Gemini failed in PM brief generation, fallback used:", e);
+      generatedBrief = `### Pat's Fallback Requirements Brief
+- **Strategic Objective**: Fast, robust fulfillment of target requirements.
+- **Scope Limits**: Strictly adhere to basic REST conventions. No extra database triggers.`;
+    }
+  } else {
+    generatedBrief = `### Pat's Agile Requirements Brief
+- **Strategic Objective**: Standardize layout and logic mapping for "${task.title}".
+- **Scope Limits**: Focus purely on explicit user specifications. Do not overcomplicate boundaries.
+- **Required Tools**: Standard schema parsers and visual design frameworks.`;
+  }
+
+  // Deduct cost
+  agent.spentUsd = Number((agent.spentUsd + promptCost).toFixed(4));
+  agent.spentTokens += tokensConsumed;
+  agent.status = "IDLE";
+
+  task.productBrief = generatedBrief;
+  task.status = "PLANNING";
+  task.updatedAt = new Date().toISOString();
+
+  transactions.push({
+    id: `tx-${Date.now()}`,
+    agentId: agent.id,
+    taskId: task.id,
+    tokensUsed: tokensConsumed,
+    costUsd: promptCost,
+    model: thermalConfig.recommendedModels[0],
+    timestamp: new Date().toISOString()
+  });
+
+  recalculateThermalAndUsage();
+  saveStateToDisk();
+
+  broadcastToClients("AGENT_UPDATED", agent);
+  broadcastToClients("TASK_UPDATED", task);
+
+  logTaskEvent(taskId, "THOUGHT_LOG", "agent-product-manager", {
+    monologue: "Brief finalized. Handing over scope parameters to Alex for technical planning."
+  });
+
+  // Next step - planning starts immediately!
+  executeWorkflowStep(task.id);
+}
+
+// STRATEGIC SIGNOFF / EXECUTIVE REVIEW PHASE execution (Sam)
+async function runCeoSignoffPhase(taskId: string) {
+  const task = tasks.find(t => t.id === taskId);
+  const agent = agents.find(a => a.id === "agent-ceo");
+  if (!task || !agent) return;
+
+  if (agent.circuitBreakerState === "OPEN") {
+    task.status = "ESCALATED";
+    task.updatedAt = new Date().toISOString();
+    broadcastToClients("TASK_UPDATED", task);
+    logTaskEvent(taskId, "TEST_FAILED", "agent-ceo", { error: "Sam's Circuit Breaker is OPEN." });
+    return;
+  }
+
+  agent.status = "WORKING";
+  broadcastToClients("AGENT_UPDATED", agent);
+
+  let generatedSignoff = "";
+  let promptCost = 0.30;
+  let tokensConsumed = 80000;
+
+  if (thermalConfig.throttleLevel === "moderate" || thermalConfig.throttleLevel === "severe") {
+    promptCost = 0.10;
+    tokensConsumed = 25000;
+  }
+
+  if (agent.spentUsd + promptCost > agent.budgetUsd) {
+    agent.circuitBreakerState = "OPEN";
+    agent.status = "TRIPPED";
+    agent.tripCount += 1;
+    agent.spentUsd = Number((agent.spentUsd + promptCost).toFixed(4));
+    agent.spentTokens += tokensConsumed;
+
+    task.status = "ESCALATED";
+    task.updatedAt = new Date().toISOString();
+
+    recalculateThermalAndUsage();
+    saveStateToDisk();
+
+    broadcastToClients("AGENT_UPDATED", agent);
+    broadcastToClients("TASK_UPDATED", task);
+
+    logTaskEvent(taskId, "CIRCUIT_BREAKER_TRIPPED", "agent-ceo", {
+      agentName: agent.name,
+      allocated: agent.budgetUsd,
+      spent: agent.spentUsd,
+      message: "CEO budget threshold breached during strategic review."
+    });
+    return;
+  }
+
+  // Generate CEO strategic signoff
+  if (ai) {
+    try {
+      logTaskEvent(taskId, "THOUGHT_LOG", "agent-ceo", {
+        monologue: "Sam conducting high-level corporate governance audit and validating sprint ROI..."
+      });
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: `Perform a CEO high-level strategic sign-off for the task: "${task.title}". Outline context: "${task.description}". Planned by Alex: "${task.plan}". Coded by Chloe: "${task.code}". Audited by Dave: "${task.qaReview}". Keep it very brief (under 120 words), using Markdown formatting with sections: "Strategic Alignment", "Financial/Budget Audit", and "Deployment Authorization".`,
+      });
+      generatedSignoff = response.text || "Failed to generate CEO strategic sign-off.";
+    } catch (e) {
+      console.error("Gemini failed in CEO signoff generation, fallback used:", e);
+      generatedSignoff = `### Sam's Fallback Strategic Sign-off
+- **Strategic Alignment**: Task matches high-level user deliverables.
+- **Financial/Budget Audit**: Approved. Total cost is well within corporate operating targets.
+- **Deployment Authorization**: AUTHORIZED. Ready for human operator approval.`;
+    }
+  } else {
+    generatedSignoff = `### Sam's Corporate Strategic Alignment Sign-off
+- **Strategic Alignment**: Excellent execution aligning user stories with core product KPIs.
+- **Financial/Budget Audit**: Fully verified. Circuit breakers remained closed, high efficiency achieved.
+- **Deployment Authorization**: APPROVED. Presenting task to human operator for the final merge sign-off.`;
+  }
+
+  // Deduct cost
+  agent.spentUsd = Number((agent.spentUsd + promptCost).toFixed(4));
+  agent.spentTokens += tokensConsumed;
+  agent.status = "IDLE";
+
+  task.strategicSignoff = generatedSignoff;
+  task.status = "AWAITING_APPROVAL";
+  task.updatedAt = new Date().toISOString();
+
   // Create human approval gate request
   const gateId = `gate-${Date.now()}`;
   const newGate: ApprovalGate = {
@@ -917,10 +1193,20 @@ async function runQAPhase(taskId: string) {
     taskId: task.id,
     state: "AWAITING_APPROVAL",
     requestedAt: new Date().toISOString(),
-    summary: `Dave has successfully audited the code. The task is now awaiting human operator sign-off for deployment.`,
+    summary: `Dave successfully audited code and Sam completed strategic CEO review. Ready for human operator sign-off.`,
     timeoutAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24h
   };
   gates.push(newGate);
+
+  transactions.push({
+    id: `tx-${Date.now()}`,
+    agentId: agent.id,
+    taskId: task.id,
+    tokensUsed: tokensConsumed,
+    costUsd: promptCost,
+    model: thermalConfig.recommendedModels[0],
+    timestamp: new Date().toISOString()
+  });
 
   recalculateThermalAndUsage();
   saveStateToDisk();
@@ -929,8 +1215,8 @@ async function runQAPhase(taskId: string) {
   broadcastToClients("TASK_UPDATED", task);
   broadcastToClients("GATE_UPDATED", newGate);
 
-  logTaskEvent(taskId, "QA_COMPLETED", "agent-qa-reviewer", {
-    message: "Security and layout validators reports passed. Human approval requested."
+  logTaskEvent(task.id, "APPROVAL_REQUESTED", "agent-ceo", {
+    message: "Dave's audit and Sam's strategic review completed. Presenting to operator for deployment sign-off."
   });
 }
 

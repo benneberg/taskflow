@@ -5,9 +5,11 @@ This document maps immediate, short-term, and medium-term backlog tasks to trans
 ---
 
 ## 🚨 Immediate Priorities (Critical Bug Fixes & Hardening)
-- [ ] **State Concurrent Lock Handling**: Replace direct synchronous file writes on `data-store.json` with a queued write buffer to avoid collisions.
-- [ ] **Input Sanitization for Dynamic Layout Views**: Sanitize text in `plan`, `code`, and `qaReview` keys inside React components to eliminate any possibility of XSS vector loads.
-- [ ] **Prune Event Log History**: Establish a bounding ceiling for SSE/event memory lists to keep active browser tab memory footprint stable.
+- [x] **State Concurrent Lock Handling**: Replace direct synchronous file writes on `data-store.json` with a queued write buffer to avoid collisions.
+- [x] **Input Sanitization for Dynamic Layout Views**: Sanitize text in `plan`, `code`, and `qaReview` keys inside React components to eliminate any possibility of XSS vector loads.
+- [x] **Prune Event Log History**: Establish a bounding ceiling for SSE/event memory lists to keep active browser tab memory footprint stable.
+- [x] **Squad Worker Expansion (Pat & Sam)**: Add strategic Product Manager (Pat) and CEO (Sam) roles into the registry and lifecycle loops.
+- [x] **Expert Studio Documentation Section**: Integrate the detailed persona, tool whitelist, and prompt engineering developer schema guidelines inside ExpertStudio.tsx.
 
 ---
 

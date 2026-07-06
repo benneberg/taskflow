@@ -22,6 +22,8 @@ export interface Task {
   plan?: string;
   code?: string;
   qaReview?: string;
+  productBrief?: string;
+  strategicSignoff?: string;
 }
 
 export type CircuitBreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';

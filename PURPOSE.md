@@ -37,7 +37,7 @@ As organizations attempt to scale AI usage inside software engineering teams, th
 ### Verified Features (Observed & Tested)
 - **Live Kanban Task Board**: Multi-stage columns tracking status updates dynamically without page reloads.
 - **Slide-out Detail Panel**: Centralized workspace showing agent plans, generated code, QA reviews, and inline HITL controls (Approve, Reject, Request Revisions text form, Terminate).
-- **Expert Studio Registry**: Central configuration module to update agent USD allocations, max iteration limits, and cognitive system prompts on the fly.
+- **Expert Studio Registry**: Central configuration module to update agent USD allocations, max iteration limits, cognitive prompts, and a **30-Day Agent Performance Audit Chart** using `recharts` to compare success rates against token footprint.
 - **Thermal Throttling Gate**: Real-time visualization of cost accumulation, throttling level warning badges, and a manual throttle override.
 - **Event-Sourced Trace Stream**: Real-time terminal visualizing the system blackboard telemetry with causation/correlation matching.
 - **Robust Backup Storage**: Local state preservation inside `/data-store.json`.

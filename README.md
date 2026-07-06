@@ -11,7 +11,7 @@ The system establishes a clean **Control Plane / Data Plane Separation** support
 - **Orchestration Layer**: Simulated durable multi-stage pipelines mimicking Temporal.io timers, sagas, and state signals.
 - **Cognitive Reasoning**: Powered by server-side **Google Gemini AI Models** utilizing the official `@google/genai` TypeScript SDK with automatic high-fidelity offline fallbacks.
 - **Immutable Ledger**: Immutable event sourcing recording full system and model state mutations with optimistic concurrency control (OCC).
-- **Control Gateways**: Restricts budget allocations using thread-safe **Per-Agent Circuit Breakers** and real-time **Thermal Cost Throttling**.
+- **Control Gateways**: Restricts budget allocations using thread-safe **Per-Agent Circuit Breakers**, real-time **Thermal Cost Throttling**, and a dynamic **30-Day Agent Performance Audit Bar Chart** built with `recharts`.
 
 ---
 

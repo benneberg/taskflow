@@ -13,7 +13,9 @@ import {
   FileText,
   Copy,
   Terminal,
-  Cpu
+  Cpu,
+  BookOpen,
+  Award
 } from 'lucide-react';
 
 interface CommandCenterProps {
@@ -25,6 +27,14 @@ interface CommandCenterProps {
   onRequestChanges: (id: string, comment: string) => Promise<void>;
   onTerminateTask: (id: string) => Promise<void>;
 }
+
+const sanitizeText = (text: string): string => {
+  if (!text) return '';
+  return text
+    .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
+    .replace(/<iframe[^>]*>([\s\S]*?)<\/iframe>/gi, '')
+    .replace(/on\w+="[^"]*"/gi, '');
+};
 
 export default function CommandCenter({
   tasks,
@@ -400,6 +410,19 @@ export default function CommandCenter({
                 </div>
               )}
 
+              {/* Product Brief (Pat) */}
+              {selectedTask.productBrief && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <BookOpen size={14} className="text-emerald-600" />
+                    <span className="font-sans font-semibold text-[11px] uppercase tracking-wider">Pat&apos;s Requirements Brief</span>
+                  </div>
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed whitespace-pre-line font-sans">
+                    {sanitizeText(selectedTask.productBrief)}
+                  </div>
+                </div>
+              )}
+
               {/* Generated Plan (Alex) */}
               {selectedTask.plan && (
                 <div className="space-y-2">
@@ -408,7 +431,7 @@ export default function CommandCenter({
                     <span className="font-sans font-semibold text-[11px] uppercase tracking-wider">Alex&apos;s Architecture Plan</span>
                   </div>
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed whitespace-pre-line font-sans">
-                    {selectedTask.plan}
+                    {sanitizeText(selectedTask.plan)}
                   </div>
                 </div>
               )}
@@ -418,7 +441,7 @@ export default function CommandCenter({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-slate-500">
-                      <Code size={14} className="text-violet-600" />
+                       <Code size={14} className="text-violet-600" />
                       <span className="font-sans font-semibold text-[11px] uppercase tracking-wider">Chloe&apos;s Compiled Code Output</span>
                     </div>
                     <button
@@ -431,7 +454,7 @@ export default function CommandCenter({
                   </div>
                   <div className="relative">
                     <pre className="p-4 bg-slate-900 border border-slate-950 rounded-xl overflow-x-auto text-xs text-indigo-200 font-mono leading-relaxed">
-                      <code>{selectedTask.code}</code>
+                      <code>{sanitizeText(selectedTask.code)}</code>
                     </pre>
                   </div>
                 </div>
@@ -445,7 +468,20 @@ export default function CommandCenter({
                     <span className="font-sans font-semibold text-[11px] uppercase tracking-wider">Dave&apos;s QA & Validation Audit</span>
                   </div>
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed whitespace-pre-line font-sans">
-                    {selectedTask.qaReview}
+                    {sanitizeText(selectedTask.qaReview)}
+                  </div>
+                </div>
+              )}
+
+              {/* Strategic CEO Sign-off (Sam) */}
+              {selectedTask.strategicSignoff && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <Award size={14} className="text-rose-600" />
+                    <span className="font-sans font-semibold text-[11px] uppercase tracking-wider">Sam&apos;s CEO Strategic Sign-off</span>
+                  </div>
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed whitespace-pre-line font-sans">
+                    {sanitizeText(selectedTask.strategicSignoff)}
                   </div>
                 </div>
               )}
