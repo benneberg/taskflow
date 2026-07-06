@@ -517,6 +517,17 @@ function registerSseClient(res: any) {
   });
 }
 
+// Keep connections alive via active comment pings every 15 seconds
+setInterval(() => {
+  sseClients.forEach(client => {
+    try {
+      client.write(": keepalive\n\n");
+    } catch (e) {
+      // client connection closed or dead
+    }
+  });
+}, 15000);
+
 function broadcastToClients(type: string, data: any) {
   const payload = JSON.stringify({ type, data });
   sseClients.forEach(client => {
@@ -1470,8 +1481,9 @@ app.put("/api/v1/budget/thermal-config", (req, res) => {
 app.get("/api/v1/stream", (req, res) => {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive"
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no"
   });
   
   // Heartbeat signal
