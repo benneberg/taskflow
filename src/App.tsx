@@ -153,11 +153,11 @@ export default function App() {
 
   // API Call Handlers
 
-  const handleCreateTask = async (title: string, description: string, priority: 'low' | 'medium' | 'high', deadline: string) => {
+  const handleCreateTask = async (title: string, description: string, priority: 'low' | 'medium' | 'high', deadline: string, templateId?: string) => {
     await fetch('/api/v1/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description, priority, deadline })
+      body: JSON.stringify({ title, description, priority, deadline, templateId })
     });
   };
 
@@ -337,6 +337,7 @@ export default function App() {
             <CommandCenter
               tasks={tasks}
               events={events}
+              agents={agents}
               onCreateTask={handleCreateTask}
               onApproveTask={handleApproveTask}
               onRejectTask={handleRejectTask}

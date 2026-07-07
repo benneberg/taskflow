@@ -12,7 +12,8 @@ import {
   BudgetTransaction,
   ThermalThrottleStatus,
   TaskStatus,
-  TaskEventType
+  TaskEventType,
+  TaskTemplate
 } from "./src/types";
 
 dotenv.config();
@@ -51,6 +52,7 @@ let agents: Agent[] = [];
 let events: TaskEvent[] = [];
 let gates: ApprovalGate[] = [];
 let transactions: BudgetTransaction[] = [];
+let templates: TaskTemplate[] = [];
 let thermalConfig: ThermalThrottleStatus = {
   throttleLevel: "none",
   enabled: true,
@@ -460,6 +462,214 @@ export default function CosmicChat() {
   recalculateThermalAndUsage();
 }
 
+function seedTemplates() {
+  templates = [
+    {
+      id: "tpl-security-sprint",
+      name: "🛡️ Security Hardening Sprint",
+      description: "Pre-configures agents for aggressive code compliance, security auditing, and tight crypto validation.",
+      targetTaskTitle: "Implement OAuth2.0 and API Security Scanning",
+      targetTaskDescription: "Integrate full OAuth2.0 authentication flow, perform security scans on all controllers, and setup automated API threat defense layers.",
+      priority: "high",
+      agentConfigs: [
+        {
+          agentId: "agent-backend-dev",
+          systemPrompt: "You are Alex in HIGH-SECURITY mode. Design PostgreSQL schemas and FastAPI endpoints with zero SQL-injection risks, robust parameter validations, and absolute data sanitization.",
+          budgetUsd: 5.0,
+          maxIterations: 10
+        },
+        {
+          agentId: "agent-frontend-dev",
+          systemPrompt: "You are Chloe. Design frontends with strict XSS and CSRF state validations, focus-trapping dialogs, and secure cookie storage hooks.",
+          budgetUsd: 4.0,
+          maxIterations: 10
+        },
+        {
+          agentId: "agent-qa-reviewer",
+          systemPrompt: "You are Dave in PARANOID-AUDITOR mode. Run deep ESLint scans, evaluate OWASP Top 10 vulnerabilities, verify CORS configurations, and enforce 100% security test coverage.",
+          budgetUsd: 3.0,
+          maxIterations: 8
+        },
+        {
+          agentId: "agent-product-manager",
+          systemPrompt: "You are Pat. Map security risk vectors, draft precise compliance boundaries, and align tooling budgets for threat remediation.",
+          budgetUsd: 3.5,
+          maxIterations: 5
+        },
+        {
+          agentId: "agent-ceo",
+          systemPrompt: "You are Sam. Govern enterprise security compliance, perform financial risk sign-offs, and certify brand trust standards.",
+          budgetUsd: 6.0,
+          maxIterations: 6
+        }
+      ]
+    },
+    {
+      id: "tpl-rapid-proto",
+      name: "⚡ Rapid Prototyping Mode",
+      description: "Fast-paced cost-effective settings prioritizing minimal latency and fast iterations.",
+      targetTaskTitle: "Create Interactive KPI Dashboard Prototype",
+      targetTaskDescription: "Build a responsive mock metrics widget displaying real-time budget transactions, utilizing Tailwind charts and fluid motion entry animations.",
+      priority: "low",
+      agentConfigs: [
+        {
+          agentId: "agent-backend-dev",
+          systemPrompt: "You are Alex in LIGHTSPEED mode. Rapidly outline temporary data store adapters and REST API endpoints.",
+          budgetUsd: 2.0,
+          maxIterations: 4
+        },
+        {
+          agentId: "agent-frontend-dev",
+          systemPrompt: "You are Chloe in CREATIVE mode. Focus strictly on breathtaking layout aesthetics, high visual rhythm, responsive tailwind, and motion layouts.",
+          budgetUsd: 2.0,
+          maxIterations: 5
+        },
+        {
+          agentId: "agent-qa-reviewer",
+          systemPrompt: "You are Dave in LEAN mode. Rapidly check syntax constraints and verify core rendering loops.",
+          budgetUsd: 1.5,
+          maxIterations: 3
+        },
+        {
+          agentId: "agent-product-manager",
+          systemPrompt: "You are Pat. Draft high-level product objectives focusing on user engagement. Keep scope boundary simple.",
+          budgetUsd: 1.5,
+          maxIterations: 3
+        },
+        {
+          agentId: "agent-ceo",
+          systemPrompt: "You are Sam. Authorize experimental sprints and track operational agility KPIs.",
+          budgetUsd: 3.0,
+          maxIterations: 3
+        }
+      ]
+    },
+    {
+      id: "tpl-db-migration",
+      name: "🗄️ Database Migration Pipeline",
+      description: "Pre-configured for PostgreSQL schemas, partition indexing, and robust transaction safety.",
+      targetTaskTitle: "Database Partitioning and Connection Pooling",
+      targetTaskDescription: "Establish robust database clustering, set up connection pool managers, write SQL schema partitioning procedures, and run test migrations.",
+      priority: "medium",
+      agentConfigs: [
+        {
+          agentId: "agent-backend-dev",
+          systemPrompt: "You are Alex, PostgreSQL guru. Design flawless schema partitioning tables, define custom triggers, and configure transaction pool rules.",
+          budgetUsd: 6.0,
+          maxIterations: 12
+        },
+        {
+          agentId: "agent-frontend-dev",
+          systemPrompt: "You are Chloe. Design real-time telemetry panels showing active client-side query metrics.",
+          budgetUsd: 3.0,
+          maxIterations: 8
+        },
+        {
+          agentId: "agent-qa-reviewer",
+          systemPrompt: "You are Dave. Verify ACID compliance, check deadlock prevention blocks, and run database stress tests.",
+          budgetUsd: 2.5,
+          maxIterations: 6
+        },
+        {
+          agentId: "agent-product-manager",
+          systemPrompt: "You are Pat. Outline data migration milestones and map database reliability criteria.",
+          budgetUsd: 2.5,
+          maxIterations: 4
+        },
+        {
+          agentId: "agent-ceo",
+          systemPrompt: "You are Sam. Validate database operational efficiency and approve hardware expansion budgets.",
+          budgetUsd: 5.0,
+          maxIterations: 5
+        }
+      ]
+    }
+  ];
+}
+
+function seedMetricsForAgents() {
+  const nowStr = new Date().toISOString();
+  agents.forEach(agent => {
+    if (!agent.lastActiveAt) agent.lastActiveAt = nowStr;
+    if (!agent.lastSuccessfulToolExecutionAt) agent.lastSuccessfulToolExecutionAt = nowStr;
+    if (!agent.lastCommunicationAt) agent.lastCommunicationAt = nowStr;
+
+    if (!agent.metrics) {
+      if (agent.id === "agent-backend-dev") {
+        agent.metrics = {
+          llmCallTokens: [85000, 92000, 110000, 95000, 90000],
+          latencyPlanningMs: [1200, 1450, 1100, 1300, 1250],
+          latencyImplementationMs: [],
+          latencyQaMs: [],
+          latencyProductBriefMs: [],
+          latencyCeoMs: [],
+          toolExecutions: [
+            { toolName: "plan_architect", successes: 12, failures: 1 },
+            { toolName: "postgresql", successes: 18, failures: 0 },
+            { toolName: "fastapi", successes: 15, failures: 2 },
+            { toolName: "db_migration", successes: 8, failures: 0 }
+          ]
+        };
+      } else if (agent.id === "agent-frontend-dev") {
+        agent.metrics = {
+          llmCallTokens: [140000, 155000, 135000, 160000, 150000],
+          latencyPlanningMs: [],
+          latencyImplementationMs: [1800, 2100, 1950, 2400, 2050],
+          latencyQaMs: [],
+          latencyProductBriefMs: [],
+          latencyCeoMs: [],
+          toolExecutions: [
+            { toolName: "react", successes: 25, failures: 1 },
+            { toolName: "tailwind_css", successes: 30, failures: 0 },
+            { toolName: "vite", successes: 12, failures: 1 },
+            { toolName: "motion", successes: 14, failures: 0 }
+          ]
+        };
+      } else if (agent.id === "agent-qa-reviewer") {
+        agent.metrics = {
+          llmCallTokens: [55000, 62000, 58000, 60000, 60000],
+          latencyPlanningMs: [],
+          latencyImplementationMs: [],
+          latencyQaMs: [950, 1100, 1050, 1150, 1000],
+          latencyProductBriefMs: [],
+          latencyCeoMs: [],
+          toolExecutions: [
+            { toolName: "eslint", successes: 22, failures: 0 },
+            { toolName: "typescript_compiler", successes: 19, failures: 3 },
+            { toolName: "security_scanner", successes: 8, failures: 0 }
+          ]
+        };
+      } else if (agent.id === "agent-product-manager") {
+        agent.metrics = {
+          llmCallTokens: [42000, 46000, 45000],
+          latencyPlanningMs: [],
+          latencyImplementationMs: [],
+          latencyQaMs: [],
+          latencyProductBriefMs: [800, 950, 900],
+          latencyCeoMs: [],
+          toolExecutions: [
+            { toolName: "requirements_analysis", successes: 10, failures: 0 },
+            { toolName: "brief_compiler", successes: 12, failures: 1 }
+          ]
+        };
+      } else if (agent.id === "agent-ceo") {
+        agent.metrics = {
+          llmCallTokens: [78000, 82000, 80000],
+          latencyPlanningMs: [],
+          latencyImplementationMs: [],
+          latencyQaMs: [],
+          latencyProductBriefMs: [],
+          latencyCeoMs: [1100, 1300, 1200],
+          toolExecutions: [
+            { toolName: "strategic_signoff", successes: 9, failures: 0 },
+            { toolName: "financial_approver", successes: 7, failures: 0 }
+          ]
+        };
+      }
+    }
+  });
+}
+
 // Load or Seed state
 if (fs.existsSync(DATA_STORE_PATH)) {
   try {
@@ -470,14 +680,23 @@ if (fs.existsSync(DATA_STORE_PATH)) {
     gates = backup.gates || [];
     transactions = backup.transactions || [];
     thermalConfig = backup.thermalConfig || thermalConfig;
+    templates = backup.templates || [];
+    if (!templates || templates.length === 0) {
+      seedTemplates();
+    }
+    seedMetricsForAgents();
     console.log("Restored full data store from backup JSON file successfully.");
   } catch (error) {
     console.error("Failed to parse data store backup. Re-seeding defaults.", error);
     seedData();
+    seedTemplates();
+    seedMetricsForAgents();
   }
 } else {
   console.log("No data store backup found. Seeding pristine initial mock dataset.");
   seedData();
+  seedTemplates();
+  seedMetricsForAgents();
   saveStateToDisk();
 }
 
@@ -492,7 +711,7 @@ function saveStateToDisk() {
   isWriting = true;
   fs.writeFile(
     DATA_STORE_PATH,
-    JSON.stringify({ tasks, agents, events, gates, transactions, thermalConfig }, null, 2),
+    JSON.stringify({ tasks, agents, events, gates, transactions, thermalConfig, templates }, null, 2),
     "utf8",
     (err) => {
       isWriting = false;
@@ -608,6 +827,17 @@ function logTaskEvent(
   if (events.length > 500) {
     events = events.slice(events.length - 500);
   }
+
+  if (agentId) {
+    const agent = agents.find(a => a.id === agentId);
+    if (agent) {
+      const nowStr = new Date().toISOString();
+      agent.lastCommunicationAt = nowStr;
+      agent.lastActiveAt = nowStr;
+      broadcastToClients("AGENT_UPDATED", agent);
+    }
+  }
+
   saveStateToDisk();
 
   // Instant real-time update
@@ -644,6 +874,7 @@ async function executeWorkflowStep(taskId: string) {
 
 // PLANNING PHASE execution (Alex)
 async function runPlanningPhase(taskId: string) {
+  const startTime = Date.now();
   const task = tasks.find(t => t.id === taskId);
   const agent = agents.find(a => a.id === "agent-backend-dev");
   if (!task || !agent) return;
@@ -680,6 +911,9 @@ async function runPlanningPhase(taskId: string) {
     
     task.status = "ESCALATED";
     task.updatedAt = new Date().toISOString();
+
+    const durationMs = Date.now() - startTime;
+    recordAgentMetrics("agent-backend-dev", tokensConsumed, 'planning', durationMs, false, ["postgresql", "plan_architect"]);
 
     recalculateThermalAndUsage();
     saveStateToDisk();
@@ -747,6 +981,9 @@ async function runPlanningPhase(taskId: string) {
     timestamp: new Date().toISOString()
   });
 
+  const durationMs = Date.now() - startTime;
+  recordAgentMetrics("agent-backend-dev", tokensConsumed, 'planning', durationMs, true, ["postgresql", "plan_architect"]);
+
   recalculateThermalAndUsage();
   saveStateToDisk();
 
@@ -763,6 +1000,7 @@ async function runPlanningPhase(taskId: string) {
 
 // IMPLEMENTING PHASE execution (Chloe)
 async function runImplementingPhase(taskId: string) {
+  const startTime = Date.now();
   const task = tasks.find(t => t.id === taskId);
   const agent = agents.find(a => a.id === "agent-frontend-dev");
   if (!task || !agent) return;
@@ -796,6 +1034,9 @@ async function runImplementingPhase(taskId: string) {
 
     task.status = "ESCALATED";
     task.updatedAt = new Date().toISOString();
+
+    const durationMs = Date.now() - startTime;
+    recordAgentMetrics("agent-frontend-dev", tokensConsumed, 'implementation', durationMs, false, ["react", "tailwind_css", "vite"]);
 
     recalculateThermalAndUsage();
     saveStateToDisk();
@@ -879,6 +1120,9 @@ export default function InteractiveWidget() {
     timestamp: new Date().toISOString()
   });
 
+  const durationMs = Date.now() - startTime;
+  recordAgentMetrics("agent-frontend-dev", tokensConsumed, 'implementation', durationMs, true, ["react", "tailwind_css", "vite"]);
+
   recalculateThermalAndUsage();
   saveStateToDisk();
 
@@ -895,6 +1139,7 @@ export default function InteractiveWidget() {
 
 // QA REVIEW PHASE execution (Dave)
 async function runQAPhase(taskId: string) {
+  const startTime = Date.now();
   const task = tasks.find(t => t.id === taskId);
   const agent = agents.find(a => a.id === "agent-qa-reviewer");
   if (!task || !agent) return;
@@ -928,6 +1173,9 @@ async function runQAPhase(taskId: string) {
 
     task.status = "ESCALATED";
     task.updatedAt = new Date().toISOString();
+
+    const durationMs = Date.now() - startTime;
+    recordAgentMetrics("agent-qa-reviewer", tokensConsumed, 'qa', durationMs, false, ["eslint", "typescript_compiler"]);
 
     recalculateThermalAndUsage();
     saveStateToDisk();
@@ -990,6 +1238,9 @@ async function runQAPhase(taskId: string) {
     timestamp: new Date().toISOString()
   });
 
+  const durationMs = Date.now() - startTime;
+  recordAgentMetrics("agent-qa-reviewer", tokensConsumed, 'qa', durationMs, true, ["eslint", "typescript_compiler"]);
+
   recalculateThermalAndUsage();
   saveStateToDisk();
 
@@ -1004,8 +1255,81 @@ async function runQAPhase(taskId: string) {
   setTimeout(() => runCeoSignoffPhase(taskId), 3000);
 }
 
+function recordAgentMetrics(
+  agentId: string,
+  tokens: number,
+  latencyType: 'planning' | 'implementation' | 'qa' | 'pm' | 'ceo',
+  durationMs: number,
+  success: boolean,
+  toolsUsed: string[]
+) {
+  const agent = agents.find(a => a.id === agentId);
+  if (!agent) return;
+
+  const nowStr = new Date().toISOString();
+  agent.lastActiveAt = nowStr;
+  if (success && toolsUsed && toolsUsed.length > 0) {
+    agent.lastSuccessfulToolExecutionAt = nowStr;
+  }
+
+  if (!agent.metrics) {
+    agent.metrics = {
+      llmCallTokens: [],
+      latencyPlanningMs: [],
+      latencyImplementationMs: [],
+      latencyQaMs: [],
+      latencyProductBriefMs: [],
+      latencyCeoMs: [],
+      toolExecutions: []
+    };
+  }
+
+  // Record tokens
+  if (tokens > 0) {
+    agent.metrics.llmCallTokens.push(tokens);
+    if (agent.metrics.llmCallTokens.length > 20) {
+      agent.metrics.llmCallTokens.shift();
+    }
+  }
+
+  // Record latency
+  if (latencyType === 'planning') {
+    agent.metrics.latencyPlanningMs.push(durationMs);
+    if (agent.metrics.latencyPlanningMs.length > 20) agent.metrics.latencyPlanningMs.shift();
+  } else if (latencyType === 'implementation') {
+    agent.metrics.latencyImplementationMs.push(durationMs);
+    if (agent.metrics.latencyImplementationMs.length > 20) agent.metrics.latencyImplementationMs.shift();
+  } else if (latencyType === 'qa') {
+    agent.metrics.latencyQaMs.push(durationMs);
+    if (agent.metrics.latencyQaMs.length > 20) agent.metrics.latencyQaMs.shift();
+  } else if (latencyType === 'pm') {
+    agent.metrics.latencyProductBriefMs.push(durationMs);
+    if (agent.metrics.latencyProductBriefMs.length > 20) agent.metrics.latencyProductBriefMs.shift();
+  } else if (latencyType === 'ceo') {
+    agent.metrics.latencyCeoMs.push(durationMs);
+    if (agent.metrics.latencyCeoMs.length > 20) agent.metrics.latencyCeoMs.shift();
+  }
+
+  // Record tools
+  toolsUsed.forEach(tool => {
+    let tMetric = agent.metrics?.toolExecutions.find(t => t.toolName === tool);
+    if (!tMetric) {
+      tMetric = { toolName: tool, successes: 0, failures: 0 };
+      agent.metrics?.toolExecutions.push(tMetric);
+    }
+    if (success) {
+      tMetric.successes += 1;
+    } else {
+      tMetric.failures += 1;
+    }
+  });
+
+  broadcastToClients("AGENT_UPDATED", agent);
+}
+
 // PRODUCT BRIEF PHASE execution (Pat)
 async function runProductBriefPhase(taskId: string) {
+  const startTime = Date.now();
   const task = tasks.find(t => t.id === taskId);
   const agent = agents.find(a => a.id === "agent-product-manager");
   if (!task || !agent) return;
@@ -1039,6 +1363,9 @@ async function runProductBriefPhase(taskId: string) {
 
     task.status = "ESCALATED";
     task.updatedAt = new Date().toISOString();
+
+    const durationMs = Date.now() - startTime;
+    recordAgentMetrics("agent-product-manager", tokensConsumed, 'pm', durationMs, false, ["requirements_analysis", "brief_compiler"]);
 
     recalculateThermalAndUsage();
     saveStateToDisk();
@@ -1098,6 +1425,9 @@ async function runProductBriefPhase(taskId: string) {
     timestamp: new Date().toISOString()
   });
 
+  const durationMs = Date.now() - startTime;
+  recordAgentMetrics("agent-product-manager", tokensConsumed, 'pm', durationMs, true, ["requirements_analysis", "brief_compiler"]);
+
   recalculateThermalAndUsage();
   saveStateToDisk();
 
@@ -1114,6 +1444,7 @@ async function runProductBriefPhase(taskId: string) {
 
 // STRATEGIC SIGNOFF / EXECUTIVE REVIEW PHASE execution (Sam)
 async function runCeoSignoffPhase(taskId: string) {
+  const startTime = Date.now();
   const task = tasks.find(t => t.id === taskId);
   const agent = agents.find(a => a.id === "agent-ceo");
   if (!task || !agent) return;
@@ -1147,6 +1478,9 @@ async function runCeoSignoffPhase(taskId: string) {
 
     task.status = "ESCALATED";
     task.updatedAt = new Date().toISOString();
+
+    const durationMs = Date.now() - startTime;
+    recordAgentMetrics("agent-ceo", tokensConsumed, 'ceo', durationMs, false, ["strategic_signoff", "financial_approver"]);
 
     recalculateThermalAndUsage();
     saveStateToDisk();
@@ -1219,6 +1553,9 @@ async function runCeoSignoffPhase(taskId: string) {
     timestamp: new Date().toISOString()
   });
 
+  const durationMs = Date.now() - startTime;
+  recordAgentMetrics("agent-ceo", tokensConsumed, 'ceo', durationMs, true, ["strategic_signoff", "financial_approver"]);
+
   recalculateThermalAndUsage();
   saveStateToDisk();
 
@@ -1233,11 +1570,61 @@ async function runCeoSignoffPhase(taskId: string) {
 
 // REST API Routes
 
+// List templates
+app.get("/api/v1/templates", (req, res) => {
+  res.json(templates);
+});
+
+// Create/save a template
+app.post("/api/v1/templates", (req, res) => {
+  const { name, description, targetTaskTitle, targetTaskDescription, priority, agentConfigs } = req.body;
+  if (!name || !agentConfigs || !Array.isArray(agentConfigs)) {
+    return res.status(400).json({ error: "Template name and agentConfigs are required." });
+  }
+
+  const newTemplate = {
+    id: `tpl-${Date.now()}`,
+    name,
+    description: description || "",
+    targetTaskTitle: targetTaskTitle || "",
+    targetTaskDescription: targetTaskDescription || "",
+    priority: priority || "medium",
+    agentConfigs
+  };
+
+  templates.push(newTemplate);
+  saveStateToDisk();
+
+  res.status(201).json(newTemplate);
+});
+
 // Create a task
 app.post("/api/v1/tasks", (req, res) => {
-  const { title, description, priority, deadline } = req.body;
+  const { title, description, priority, deadline, templateId } = req.body;
   if (!title || !description) {
     return res.status(400).json({ error: "Title and description are required." });
+  }
+
+  // Pre-fill agent configurations if a template is selected
+  if (templateId) {
+    const tpl = templates.find(t => t.id === templateId);
+    if (tpl) {
+      tpl.agentConfigs.forEach(cfg => {
+        const ag = agents.find(a => a.id === cfg.agentId);
+        if (ag) {
+          ag.systemPrompt = cfg.systemPrompt;
+          ag.budgetUsd = cfg.budgetUsd;
+          if (cfg.maxIterations !== undefined) {
+            ag.maxIterations = cfg.maxIterations;
+          }
+          // Reset agent spent/circuit breaker state for the new task run
+          ag.status = "IDLE";
+          ag.circuitBreakerState = "CLOSED";
+        }
+      });
+      // Broadcast updated agent configuration
+      agents.forEach(ag => broadcastToClients("AGENT_UPDATED", ag));
+    }
   }
 
   const newTask: Task = {
@@ -1428,6 +1815,44 @@ app.post("/api/v1/agents/:id/reset-circuit-breaker", (req, res) => {
 
   broadcastToClients("AGENT_UPDATED", agent);
   res.json({ message: `${agent.name}'s circuit breaker successfully reset.`, agent });
+});
+
+// Simulate agent deadlock / autonomous stalled process
+app.post("/api/v1/agents/:id/simulate-deadlock", (req, res) => {
+  const agent = agents.find(a => a.id === req.params.id);
+  if (!agent) return res.status(404).json({ error: "Agent not found" });
+
+  agent.status = "WORKING";
+  // Subtract 45 seconds to guarantee immediate deadlock status
+  const deadlockTime = new Date(Date.now() - 45 * 1000).toISOString();
+  agent.lastActiveAt = deadlockTime;
+  agent.lastSuccessfulToolExecutionAt = deadlockTime;
+  agent.lastCommunicationAt = deadlockTime;
+
+  recalculateThermalAndUsage();
+  saveStateToDisk();
+
+  broadcastToClients("AGENT_UPDATED", agent);
+  res.json({ message: `${agent.name} is now simulated as WORKING with an active deadlock.`, agent });
+});
+
+// Recover/Resolve agent deadlock with a heartbeat ping
+app.post("/api/v1/agents/:id/ping-heartbeat", (req, res) => {
+  const agent = agents.find(a => a.id === req.params.id);
+  if (!agent) return res.status(404).json({ error: "Agent not found" });
+
+  const nowStr = new Date().toISOString();
+  agent.lastActiveAt = nowStr;
+  agent.lastCommunicationAt = nowStr;
+  agent.lastSuccessfulToolExecutionAt = nowStr;
+  // If they were working/stalled, return to IDLE
+  agent.status = "IDLE";
+
+  recalculateThermalAndUsage();
+  saveStateToDisk();
+
+  broadcastToClients("AGENT_UPDATED", agent);
+  res.json({ message: `${agent.name}'s process heartbeat has been re-established.`, agent });
 });
 
 // Get general budget metrics

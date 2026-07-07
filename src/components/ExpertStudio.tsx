@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Agent } from '../types';
-import { ShieldCheck, ShieldAlert, Settings, Save, RotateCcw, Cpu, Sparkles, BarChart3 } from 'lucide-react';
+import { Agent, TaskTemplate } from '../types';
+import { ShieldCheck, ShieldAlert, Settings, Save, RotateCcw, Cpu, Sparkles, BarChart3, HeartPulse, Activity, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -24,6 +24,70 @@ export default function ExpertStudio({ agents, onUpdateAgent, onResetCircuitBrea
   const [maxIterations, setMaxIterations] = useState<number>(10);
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [saving, setSaving] = useState<boolean>(false);
+  const [now, setNow] = useState<number>(Date.now());
+  const [simulationMsg, setSimulationMsg] = useState<string>('');
+  const [simulating, setSimulating] = useState<boolean>(false);
+
+  const activeAgent = selectedAgent ? (agents.find(a => a.id === selectedAgent.id) || selectedAgent) : null;
+
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Template creation form state
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateDesc, setNewTemplateDesc] = useState('');
+  const [newTemplateTargetTitle, setNewTemplateTargetTitle] = useState('');
+  const [newTemplateTargetDesc, setNewTemplateTargetDesc] = useState('');
+  const [newTemplatePriority, setNewTemplatePriority] = useState<'low' | 'medium' | 'high'>('medium');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateSavedMsg, setTemplateSavedMsg] = useState('');
+
+  const handleSaveTemplate = async () => {
+    if (!newTemplateName.trim()) return;
+    setSavingTemplate(true);
+    setTemplateSavedMsg('');
+    try {
+      const agentConfigs = agents.map(ag => ({
+        agentId: ag.id,
+        systemPrompt: ag.systemPrompt,
+        budgetUsd: ag.budgetUsd,
+        maxIterations: ag.maxIterations
+      }));
+
+      const response = await fetch('/api/v1/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newTemplateName,
+          description: newTemplateDesc,
+          targetTaskTitle: newTemplateTargetTitle,
+          targetTaskDescription: newTemplateTargetDesc,
+          priority: newTemplatePriority,
+          agentConfigs
+        })
+      });
+
+      if (response.ok) {
+        setTemplateSavedMsg('Template saved successfully!');
+        setNewTemplateName('');
+        setNewTemplateDesc('');
+        setNewTemplateTargetTitle('');
+        setNewTemplateTargetDesc('');
+        setNewTemplatePriority('medium');
+      } else {
+        setTemplateSavedMsg('Failed to save template.');
+      }
+    } catch (e) {
+      console.error(e);
+      setTemplateSavedMsg('Error saving template.');
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
 
   // Generate 30-day performance data based on live agent metrics to keep charts dynamic
   const performanceData = agents.map(agent => {
@@ -151,6 +215,49 @@ export default function ExpertStudio({ agents, onUpdateAgent, onResetCircuitBrea
                   </div>
                 </div>
 
+                {/* Health Check telemetry */}
+                {(() => {
+                  const lastActive = agent.lastActiveAt ? new Date(agent.lastActiveAt).getTime() : now;
+                  const secSinceActive = Math.max(0, Math.floor((now - lastActive) / 1000));
+
+                  let healthLabel = 'Asleep';
+                  let healthBg = 'bg-slate-50 border-slate-200 text-slate-600';
+                  let healthIcon = <Clock size={11} className="text-slate-400" />;
+
+                  if (agent.status === 'TRIPPED') {
+                    healthLabel = 'Tripped';
+                    healthBg = 'bg-rose-50 border-rose-200 text-rose-700 animate-pulse';
+                    healthIcon = <ShieldAlert size={11} className="text-rose-500" />;
+                  } else if (agent.status === 'WORKING') {
+                    if (secSinceActive < 15) {
+                      healthLabel = 'Processing';
+                      healthBg = 'bg-emerald-50 border-emerald-200 text-emerald-700';
+                      healthIcon = <Activity size={11} className="text-emerald-500 animate-pulse" />;
+                    } else if (secSinceActive < 30) {
+                      healthLabel = 'Lagging';
+                      healthBg = 'bg-amber-50 border-amber-200 text-amber-700';
+                      healthIcon = <Clock size={11} className="text-amber-500" />;
+                    } else {
+                      healthLabel = 'Deadlocked';
+                      healthBg = 'bg-rose-50 border-rose-200 text-rose-700 animate-bounce';
+                      healthIcon = <AlertTriangle size={11} className="text-rose-500" />;
+                    }
+                  }
+
+                  return (
+                    <div className="mt-3 flex items-center justify-between text-[11px] font-sans">
+                      <span className="text-slate-400 font-medium flex items-center gap-1">
+                        <HeartPulse size={12} className="text-indigo-500" /> Process Health:
+                      </span>
+                      <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-mono font-bold uppercase ${healthBg}`}>
+                        {healthIcon}
+                        {healthLabel}
+                        {agent.status === 'WORKING' && ` (${secSinceActive}s)`}
+                      </span>
+                    </div>
+                  );
+                })()}
+
                 {/* Micro metrics */}
                 <div className="mt-3.5 flex items-center justify-between text-[10px] font-mono text-slate-400 border-t border-slate-100 pt-2">
                   <span>Trips: {agent.tripCount}</span>
@@ -160,29 +267,117 @@ export default function ExpertStudio({ agents, onUpdateAgent, onResetCircuitBrea
             );
           })}
         </div>
+
+        {/* Template Saver Form Card */}
+        <div className="p-5 bg-white border border-slate-200/80 rounded-2xl shadow-xs space-y-4 mt-5">
+          <div className="flex items-center gap-2 pb-1.5 border-b border-slate-100">
+            <Save className="text-indigo-600 w-4.5 h-4.5" />
+            <span className="font-sans font-bold text-slate-900 text-xs uppercase tracking-wider">Save Custom Squad Template</span>
+          </div>
+          
+          <div className="space-y-3 text-xs">
+            <p className="text-slate-500 leading-relaxed text-[11px]">
+              Capture the current active agent prompts, spending budgets, and loop limit thresholds as a custom loadable task template.
+            </p>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold text-slate-500 font-mono uppercase">Template Name</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. 🚀 Ultra-Fast Prototyping Blueprint"
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 transition-all"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold text-slate-500 font-mono uppercase">Template Description</label>
+              <textarea
+                rows={2}
+                placeholder="Briefly explain the use-case for this configuration blueprint..."
+                value={newTemplateDesc}
+                onChange={(e) => setNewTemplateDesc(e.target.value)}
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-slate-800 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 transition-all resize-none"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold text-slate-500 font-mono uppercase">Default Task Title</label>
+              <input
+                type="text"
+                placeholder="e.g. Rapid KPI Widget Sprint"
+                value={newTemplateTargetTitle}
+                onChange={(e) => setNewTemplateTargetTitle(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 transition-all"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold text-slate-500 font-mono uppercase">Default Description</label>
+              <textarea
+                rows={2}
+                placeholder="Provide pre-filled functional task details..."
+                value={newTemplateTargetDesc}
+                onChange={(e) => setNewTemplateTargetDesc(e.target.value)}
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-slate-800 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 transition-all resize-none"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold text-slate-500 font-mono uppercase">Default Priority</label>
+              <select
+                value={newTemplatePriority}
+                onChange={(e: any) => setNewTemplatePriority(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:border-indigo-500 transition-all"
+              >
+                <option value="low">Low Priority</option>
+                <option value="medium">Medium Priority</option>
+                <option value="high">High Priority</option>
+              </select>
+            </div>
+
+            <button
+              onClick={handleSaveTemplate}
+              disabled={savingTemplate || !newTemplateName.trim()}
+              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-sans text-xs font-semibold rounded-xl shadow-md transition-all cursor-pointer font-sans"
+            >
+              {savingTemplate ? 'Saving Template...' : 'Save Current Squad as Template'}
+            </button>
+
+            {templateSavedMsg && (
+              <p className={`text-[10px] font-mono font-bold text-center mt-1 ${
+                templateSavedMsg.includes('successfully') ? 'text-emerald-600' : 'text-rose-600'
+              }`}>
+                {templateSavedMsg}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Editor Panel */}
       <div className="lg:col-span-2">
-        {selectedAgent ? (
+        {activeAgent ? (
           <div className="p-6 bg-white border border-slate-200/80 rounded-2xl shadow-xs space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <Settings className="text-indigo-600 w-5 h-5" />
                 <div>
                   <h2 className="font-sans font-bold text-slate-900 text-sm">
-                    Configure {selectedAgent.name}
+                    Configure {activeAgent.name}
                   </h2>
                   <p className="text-[11px] text-slate-400 font-mono uppercase tracking-wide">
-                    SYSTEM INSTANCE: {selectedAgent.id}
+                    SYSTEM INSTANCE: {activeAgent.id}
                   </p>
                 </div>
               </div>
 
-              {selectedAgent.circuitBreakerState === 'OPEN' && (
+              {activeAgent.circuitBreakerState === 'OPEN' && (
                 <button
-                  onClick={() => onResetCircuitBreaker(selectedAgent.id).then(() => selectAgent({
-                    ...selectedAgent,
+                  onClick={() => onResetCircuitBreaker(activeAgent.id).then(() => selectAgent({
+                    ...activeAgent,
                     circuitBreakerState: 'CLOSED',
                     status: 'IDLE'
                   }))}
@@ -193,6 +388,167 @@ export default function ExpertStudio({ agents, onUpdateAgent, onResetCircuitBrea
                 </button>
               )}
             </div>
+
+            {/* Health check & diagnostics section */}
+            {(() => {
+              const lastActive = activeAgent.lastActiveAt ? new Date(activeAgent.lastActiveAt).getTime() : now;
+              const secSinceActive = Math.max(0, Math.floor((now - lastActive) / 1000));
+
+              const lastTool = activeAgent.lastSuccessfulToolExecutionAt ? new Date(activeAgent.lastSuccessfulToolExecutionAt).getTime() : now;
+              const secSinceTool = Math.max(0, Math.floor((now - lastTool) / 1000));
+
+              const lastComm = activeAgent.lastCommunicationAt ? new Date(activeAgent.lastCommunicationAt).getTime() : now;
+              const secSinceComm = Math.max(0, Math.floor((now - lastComm) / 1000));
+
+              let healthLabel = 'Asleep (Idle)';
+              let healthStatus = 'READY';
+              let healthBg = 'bg-slate-50 border-slate-200 text-slate-700';
+              let healthIcon = <Clock size={16} className="text-slate-400" />;
+              let healthDesc = `${activeAgent.name} is currently resting and awaiting an autonomous task assignment. No live loops are running.`;
+
+              if (activeAgent.circuitBreakerState === 'OPEN') {
+                healthStatus = 'TRIPPED';
+                healthLabel = 'Tripped & Terminated';
+                healthBg = 'bg-rose-50 border-rose-300 text-rose-700 animate-pulse';
+                healthIcon = <ShieldAlert size={16} className="text-rose-500" />;
+                healthDesc = `CRITICAL: ${activeAgent.name}'s safety limits were breached! Circuit breaker is OPEN. Reset the circuit breaker to resume.`;
+              } else if (activeAgent.status === 'WORKING') {
+                if (secSinceActive < 15) {
+                  healthStatus = 'HEALTHY';
+                  healthLabel = 'Processing Securely';
+                  healthBg = 'bg-emerald-50 border-emerald-300 text-emerald-800';
+                  healthIcon = <Activity size={16} className="text-emerald-500 animate-pulse" />;
+                  healthDesc = `${activeAgent.name} is currently running a live autonomous iteration. Spawning sub-agents and compiling output.`;
+                } else if (secSinceActive < 30) {
+                  healthStatus = 'LAGGING';
+                  healthLabel = 'Processing Lag / High Latency';
+                  healthBg = 'bg-amber-50 border-amber-300 text-amber-800';
+                  healthIcon = <Clock size={16} className="text-amber-500" />;
+                  healthDesc = `Notice: ${activeAgent.name} is taking longer than usual to complete this step. Re-attempting or awaiting upstream response.`;
+                } else {
+                  healthStatus = 'DEADLOCKED';
+                  healthLabel = 'PROCESS DEADLOCKED / STALLED';
+                  healthBg = 'bg-rose-50 border-rose-300 text-rose-800 animate-pulse';
+                  healthIcon = <AlertTriangle size={16} className="text-rose-500 animate-bounce" />;
+                  healthDesc = `WARNING: No tool execution or communication has been recorded for ${secSinceActive}s in WORKING state. The autonomous loop appears deadlocked!`;
+                }
+              }
+
+              // Handler to trigger simulated deadlock via API
+              const handleSimulateDeadlock = async () => {
+                setSimulating(true);
+                setSimulationMsg('');
+                try {
+                  const res = await fetch(`/api/v1/agents/${activeAgent.id}/simulate-deadlock`, { method: 'POST' });
+                  if (res.ok) {
+                    setSimulationMsg(`Deadlock simulation injected successfully! ${activeAgent.name} is now stalled.`);
+                  } else {
+                    setSimulationMsg('Failed to inject deadlock.');
+                  }
+                } catch (err) {
+                  console.error(err);
+                  setSimulationMsg('Error injecting deadlock.');
+                } finally {
+                  setSimulating(false);
+                }
+              };
+
+              // Handler to clear/ping heartbeat
+              const handlePingHeartbeat = async () => {
+                setSimulating(true);
+                setSimulationMsg('');
+                try {
+                  const res = await fetch(`/api/v1/agents/${activeAgent.id}/ping-heartbeat`, { method: 'POST' });
+                  if (res.ok) {
+                    setSimulationMsg(`Process heartbeat pinged. ${activeAgent.name} has been recovered to IDLE!`);
+                  } else {
+                    setSimulationMsg('Failed to ping heartbeat.');
+                  }
+                } catch (err) {
+                  console.error(err);
+                  setSimulationMsg('Error pinging heartbeat.');
+                } finally {
+                  setSimulating(false);
+                }
+              };
+
+              return (
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <HeartPulse className="text-indigo-600 w-4.5 h-4.5" />
+                      <span className="font-sans font-bold text-slate-900 text-xs uppercase tracking-wider">Health Check & Autonomous Diagnostics</span>
+                    </div>
+                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide font-mono border ${healthBg}`}>
+                      {healthIcon}
+                      {healthLabel}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    {healthDesc}
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-200 text-xs font-mono">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-slate-400 block uppercase font-sans">Last Activity</span>
+                      <span className="font-bold text-slate-700">{secSinceActive}s ago</span>
+                      <span className="text-[9px] text-slate-400 block truncate">{activeAgent.lastActiveAt ? new Date(activeAgent.lastActiveAt).toLocaleTimeString() : 'Never'}</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-slate-400 block uppercase font-sans">Last Successful Tool Execution</span>
+                      <span className="font-bold text-slate-700">{secSinceTool}s ago</span>
+                      <span className="text-[9px] text-slate-400 block truncate">{activeAgent.lastSuccessfulToolExecutionAt ? new Date(activeAgent.lastSuccessfulToolExecutionAt).toLocaleTimeString() : 'Never'}</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-slate-400 block uppercase font-sans">Last Communication</span>
+                      <span className="font-bold text-slate-700">{secSinceComm}s ago</span>
+                      <span className="text-[9px] text-slate-400 block truncate">{activeAgent.lastCommunicationAt ? new Date(activeAgent.lastCommunicationAt).toLocaleTimeString() : 'Never'}</span>
+                    </div>
+                  </div>
+
+                  {/* Simulations & Heartbeat Actions */}
+                  <div className="flex items-center gap-3 pt-1">
+                    {activeAgent.status !== 'WORKING' || healthStatus !== 'DEADLOCKED' ? (
+                      <button
+                        onClick={handleSimulateDeadlock}
+                        disabled={simulating || activeAgent.circuitBreakerState === 'OPEN'}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-mono text-[10px] font-bold uppercase rounded-lg shadow-sm transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <AlertTriangle size={12} />
+                        Simulate Deadlock
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handlePingHeartbeat}
+                        disabled={simulating}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-mono text-[10px] font-bold uppercase rounded-lg shadow-sm transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <RefreshCw size={12} className="animate-spin" />
+                        Ping Heartbeat (Clear Deadlock)
+                      </button>
+                    )}
+
+                    {activeAgent.status === 'WORKING' && healthStatus !== 'DEADLOCKED' && (
+                      <button
+                        onClick={handlePingHeartbeat}
+                        disabled={simulating}
+                        className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white font-mono text-[10px] font-bold uppercase rounded-lg shadow-sm transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <RefreshCw size={12} />
+                        Ping Heartbeat
+                      </button>
+                    )}
+
+                    {simulationMsg && (
+                      <span className="text-[10px] text-indigo-600 font-mono font-bold animate-pulse truncate max-w-xs">
+                        {simulationMsg}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Form Fields */}
             <div className="grid grid-cols-2 gap-4">
@@ -263,6 +619,121 @@ export default function ExpertStudio({ agents, onUpdateAgent, onResetCircuitBrea
                 {saving ? 'Applying...' : 'Apply Agent Parameters'}
               </button>
             </div>
+
+            {/* Real-time Agent Telemetry & LLM Metrics */}
+            {selectedAgent.metrics && (
+              <div className="space-y-4 border-t border-slate-100 pt-5">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="text-indigo-600 w-4.5 h-4.5" />
+                  <span className="font-sans font-bold text-slate-900 text-xs uppercase tracking-wider">Telemetry & LLM Run Metrics</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Token & Latency Column */}
+                  <div className="space-y-3 bg-slate-50 border border-slate-200/60 p-4 rounded-xl">
+                    <h4 className="text-[10px] font-mono text-slate-500 uppercase tracking-wider font-bold">LLM Transaction Profiles</h4>
+                    
+                    {/* Latency Steps Breakdown */}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-mono text-slate-400">Step Latency Profile</p>
+                      
+                      {selectedAgent.metrics.latencyPlanningMs && selectedAgent.metrics.latencyPlanningMs.length > 0 && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-600 font-medium">Planning Latency:</span>
+                          <span className="font-mono font-bold text-slate-800">
+                            {(selectedAgent.metrics.latencyPlanningMs.reduce((a,b)=>a+b,0)/selectedAgent.metrics.latencyPlanningMs.length).toFixed(0)} ms
+                          </span>
+                        </div>
+                      )}
+
+                      {selectedAgent.metrics.latencyImplementationMs && selectedAgent.metrics.latencyImplementationMs.length > 0 && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-600 font-medium">Implementation Latency:</span>
+                          <span className="font-mono font-bold text-slate-800">
+                            {(selectedAgent.metrics.latencyImplementationMs.reduce((a,b)=>a+b,0)/selectedAgent.metrics.latencyImplementationMs.length).toFixed(0)} ms
+                          </span>
+                        </div>
+                      )}
+
+                      {selectedAgent.metrics.latencyQaMs && selectedAgent.metrics.latencyQaMs.length > 0 && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-600 font-medium">QA Review Latency:</span>
+                          <span className="font-mono font-bold text-slate-800">
+                            {(selectedAgent.metrics.latencyQaMs.reduce((a,b)=>a+b,0)/selectedAgent.metrics.latencyQaMs.length).toFixed(0)} ms
+                          </span>
+                        </div>
+                      )}
+
+                      {selectedAgent.metrics.latencyProductBriefMs && selectedAgent.metrics.latencyProductBriefMs.length > 0 && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-600 font-medium">Product Brief Latency:</span>
+                          <span className="font-mono font-bold text-slate-800">
+                            {(selectedAgent.metrics.latencyProductBriefMs.reduce((a,b)=>a+b,0)/selectedAgent.metrics.latencyProductBriefMs.length).toFixed(0)} ms
+                          </span>
+                        </div>
+                      )}
+
+                      {selectedAgent.metrics.latencyCeoMs && selectedAgent.metrics.latencyCeoMs.length > 0 && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-600 font-medium">CEO Sign-off Latency:</span>
+                          <span className="font-mono font-bold text-slate-800">
+                            {(selectedAgent.metrics.latencyCeoMs.reduce((a,b)=>a+b,0)/selectedAgent.metrics.latencyCeoMs.length).toFixed(0)} ms
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Token Footprint List */}
+                    {selectedAgent.metrics.llmCallTokens && selectedAgent.metrics.llmCallTokens.length > 0 && (
+                      <div className="space-y-1.5 pt-2 border-t border-slate-200">
+                        <p className="text-[10px] font-mono text-slate-400">Tokens per LLM Call (Recent runs)</p>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {selectedAgent.metrics.llmCallTokens.map((tokens, idx) => (
+                            <span key={idx} className="bg-white border border-slate-200 text-slate-600 font-mono text-[10px] px-2 py-0.5 rounded-md font-bold">
+                              {(tokens / 1000).toFixed(0)}k
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tool Executions Grid */}
+                  <div className="space-y-3 bg-slate-50 border border-slate-200/60 p-4 rounded-xl">
+                    <h4 className="text-[10px] font-mono text-slate-500 uppercase tracking-wider font-bold">Tool Execution Success Rates</h4>
+                    
+                    {selectedAgent.metrics.toolExecutions && selectedAgent.metrics.toolExecutions.length > 0 ? (
+                      <div className="space-y-2.5">
+                        {selectedAgent.metrics.toolExecutions.map((tool, idx) => {
+                          const total = tool.successes + tool.failures;
+                          const rate = total > 0 ? (tool.successes / total) * 100 : 0;
+                          return (
+                            <div key={idx} className="space-y-1">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-mono font-semibold text-slate-700 bg-white border border-slate-200 px-1.5 py-0.5 rounded-md text-[10px]">
+                                  {tool.toolName}
+                                </span>
+                                <span className="font-mono text-slate-500 font-bold text-[10px]">
+                                  {tool.successes}/{total} ok ({rate.toFixed(0)}%)
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${rate > 85 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                  style={{ width: `${rate}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400 italic">No tool calls executed yet in this session.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full p-12 border border-dashed border-slate-200 rounded-2xl bg-white text-slate-400 space-y-3 shadow-2xs">

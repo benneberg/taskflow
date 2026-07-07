@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Task, TaskStatus, TaskEvent } from '../types';
+import { Task, TaskStatus, TaskEvent, TaskTemplate, Agent } from '../types';
 import {
   Plus,
   Calendar,
@@ -15,13 +15,19 @@ import {
   Terminal,
   Cpu,
   BookOpen,
-  Award
+  Award,
+  Timer,
+  Zap,
+  ChevronDown,
+  ChevronUp,
+  BarChart3
 } from 'lucide-react';
 
 interface CommandCenterProps {
   tasks: Task[];
   events: TaskEvent[];
-  onCreateTask: (title: string, description: string, priority: 'low' | 'medium' | 'high', deadline: string) => Promise<void>;
+  agents: Agent[];
+  onCreateTask: (title: string, description: string, priority: 'low' | 'medium' | 'high', deadline: string, templateId?: string) => Promise<void>;
   onApproveTask: (id: string) => Promise<void>;
   onRejectTask: (id: string) => Promise<void>;
   onRequestChanges: (id: string, comment: string) => Promise<void>;
@@ -39,6 +45,7 @@ const sanitizeText = (text: string): string => {
 export default function CommandCenter({
   tasks,
   events,
+  agents,
   onCreateTask,
   onApproveTask,
   onRejectTask,
@@ -47,6 +54,7 @@ export default function CommandCenter({
 }: CommandCenterProps) {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showTelemetry, setShowTelemetry] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [changesComment, setChangesComment] = useState('');
   const [submittingChanges, setSubmittingChanges] = useState(false);
@@ -56,6 +64,30 @@ export default function CommandCenter({
   const [newDesc, setNewDesc] = useState('');
   const [newPriority, setNewPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [newDeadline, setNewDeadline] = useState('');
+
+  // Templates list & select state
+  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+
+  React.useEffect(() => {
+    if (showCreateModal) {
+      fetch('/api/v1/templates')
+        .then(r => r.json())
+        .then(data => setTemplates(data))
+        .catch(err => console.error("Failed to load templates:", err));
+    }
+  }, [showCreateModal]);
+
+  const handleTemplateChange = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    if (!templateId) return;
+    const tpl = templates.find(t => t.id === templateId);
+    if (tpl) {
+      setNewTitle(tpl.targetTaskTitle || '');
+      setNewDesc(tpl.targetTaskDescription || '');
+      setNewPriority(tpl.priority || 'medium');
+    }
+  };
 
   // Group tasks into columns
   const getColumnTasks = (colType: string) => {
@@ -73,11 +105,12 @@ export default function CommandCenter({
     e.preventDefault();
     if (!newTitle.trim() || !newDesc.trim()) return;
     try {
-      await onCreateTask(newTitle, newDesc, newPriority, newDeadline);
+      await onCreateTask(newTitle, newDesc, newPriority, newDeadline, selectedTemplateId || undefined);
       setNewTitle('');
       setNewDesc('');
       setNewPriority('medium');
       setNewDeadline('');
+      setSelectedTemplateId('');
       setShowCreateModal(false);
     } catch (err) {
       console.error(err);
@@ -145,6 +178,127 @@ export default function CommandCenter({
           Deploy New Task
         </button>
       </div>
+
+      {/* Collapsible Telemetry Card */}
+      <button
+        onClick={() => setShowTelemetry(!showTelemetry)}
+        className="flex items-center justify-between w-full p-4 bg-slate-100 hover:bg-slate-200/60 border border-slate-200/80 rounded-2xl transition-all text-left shadow-xs cursor-pointer group"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 bg-indigo-50 border border-indigo-100 rounded-lg text-indigo-600">
+            <BarChart3 className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="font-sans font-bold text-xs text-slate-800 tracking-tight">Active Squad Telemetry & Performance Profiles</h3>
+            <p className="text-[10px] text-slate-500 font-mono font-medium">Real-time token distribution, step response latencies, and tool validation yields</p>
+          </div>
+        </div>
+        <div className="text-slate-400 group-hover:text-slate-600 transition-colors">
+          {showTelemetry ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </div>
+      </button>
+
+      {showTelemetry && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 bg-white border border-slate-200/80 rounded-2xl shadow-sm">
+          {agents.map((agent) => {
+            const planLat = agent.metrics?.latencyPlanningMs && agent.metrics.latencyPlanningMs.length > 0
+              ? (agent.metrics.latencyPlanningMs.reduce((a, b) => a + b, 0) / agent.metrics.latencyPlanningMs.length).toFixed(0) : null;
+            const implLat = agent.metrics?.latencyImplementationMs && agent.metrics.latencyImplementationMs.length > 0
+              ? (agent.metrics.latencyImplementationMs.reduce((a, b) => a + b, 0) / agent.metrics.latencyImplementationMs.length).toFixed(0) : null;
+            const qaLat = agent.metrics?.latencyQaMs && agent.metrics.latencyQaMs.length > 0
+              ? (agent.metrics.latencyQaMs.reduce((a, b) => a + b, 0) / agent.metrics.latencyQaMs.length).toFixed(0) : null;
+            const pmLat = agent.metrics?.latencyProductBriefMs && agent.metrics.latencyProductBriefMs.length > 0
+              ? (agent.metrics.latencyProductBriefMs.reduce((a, b) => a + b, 0) / agent.metrics.latencyProductBriefMs.length).toFixed(0) : null;
+            const ceoLat = agent.metrics?.latencyCeoMs && agent.metrics.latencyCeoMs.length > 0
+              ? (agent.metrics.latencyCeoMs.reduce((a, b) => a + b, 0) / agent.metrics.latencyCeoMs.length).toFixed(0) : null;
+
+            return (
+              <div key={agent.id} className="p-3.5 bg-slate-50/50 border border-slate-100 rounded-xl space-y-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-sans font-bold text-xs text-slate-800 truncate">{agent.name}</span>
+                    <span className={`text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full border truncate ${
+                      agent.id === 'agent-ceo' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                      agent.id === 'agent-product-manager' ? 'bg-sky-50 text-sky-700 border-sky-200' :
+                      'bg-indigo-50 text-indigo-700 border-indigo-200'
+                    }`}>
+                      {agent.role}
+                    </span>
+                  </div>
+
+                  {/* Token Info */}
+                  <div className="mt-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] font-mono">
+                      <span className="text-slate-400">Recent Tokens</span>
+                      <span className="text-slate-700 font-bold">
+                        {agent.metrics?.llmCallTokens && agent.metrics.llmCallTokens.length > 0
+                          ? `${(agent.metrics.llmCallTokens[agent.metrics.llmCallTokens.length - 1] / 1000).toFixed(0)}k`
+                          : '0k'}
+                      </span>
+                    </div>
+
+                    {/* Latency Info */}
+                    <div className="space-y-1 border-t border-slate-200/50 pt-1.5">
+                      <p className="text-[9px] font-mono text-slate-400 font-semibold uppercase">Response Latencies</p>
+                      {planLat && (
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-slate-500">Planning:</span>
+                          <span className="font-mono font-bold text-slate-700">{planLat}ms</span>
+                        </div>
+                      )}
+                      {implLat && (
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-slate-500">Coding:</span>
+                          <span className="font-mono font-bold text-slate-700">{implLat}ms</span>
+                        </div>
+                      )}
+                      {qaLat && (
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-slate-500">QA Scan:</span>
+                          <span className="font-mono font-bold text-slate-700">{qaLat}ms</span>
+                        </div>
+                      )}
+                      {pmLat && (
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-slate-500">Briefing:</span>
+                          <span className="font-mono font-bold text-slate-700">{pmLat}ms</span>
+                        </div>
+                      )}
+                      {ceoLat && (
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-slate-500">Approval:</span>
+                          <span className="font-mono font-bold text-slate-700">{ceoLat}ms</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top Tool Execution */}
+                {agent.metrics?.toolExecutions && agent.metrics.toolExecutions.length > 0 && (
+                  <div className="border-t border-slate-200/50 pt-2 space-y-1">
+                    <p className="text-[9px] font-mono text-slate-400 font-semibold uppercase">Tool Executions</p>
+                    <div className="flex flex-wrap gap-1">
+                      {agent.metrics.toolExecutions.slice(0, 2).map((t, i) => {
+                        const total = t.successes + t.failures;
+                        const rate = total > 0 ? (t.successes / total) * 100 : 0;
+                        return (
+                          <div key={i} className="text-[9px] font-mono bg-white border border-slate-200 px-1 py-0.5 rounded-md text-slate-600 flex items-center gap-1">
+                            <span className="font-semibold">{t.toolName}:</span>
+                            <span className={rate > 85 ? "text-emerald-600 font-bold" : "text-amber-600 font-bold"}>
+                              {rate.toFixed(0)}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Kanban Board Container */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 overflow-x-auto pb-4">
@@ -239,6 +393,27 @@ export default function CommandCenter({
             </div>
 
             <form onSubmit={handleCreate} className="space-y-3.5">
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500 font-medium">Load Task Template (Optional)</label>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => handleTemplateChange(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:border-indigo-500 transition-all font-sans cursor-pointer"
+                >
+                  <option value="">-- No Template Selected --</option>
+                  {templates.map(tpl => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                    </option>
+                  ))}
+                </select>
+                {selectedTemplateId && (
+                  <p className="text-[10px] text-indigo-600 font-medium font-mono">
+                    Template applied. Agent parameter sets pre-filled.
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-1">
                 <label className="text-xs text-slate-500 font-medium">Task Title</label>
                 <input

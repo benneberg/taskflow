@@ -28,6 +28,22 @@ export interface Task {
 
 export type CircuitBreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
+export interface ToolMetric {
+  toolName: string;
+  successes: number;
+  failures: number;
+}
+
+export interface AgentMetrics {
+  llmCallTokens: number[];
+  latencyPlanningMs: number[];
+  latencyImplementationMs: number[];
+  latencyQaMs: number[];
+  latencyProductBriefMs: number[];
+  latencyCeoMs: number[];
+  toolExecutions: ToolMetric[];
+}
+
 export interface Agent {
   id: string;
   name: string;
@@ -45,6 +61,27 @@ export interface Agent {
   tripCount: number;
   totalWarnings: number;
   status: 'IDLE' | 'WORKING' | 'TRIPPED';
+  metrics?: AgentMetrics;
+  lastActiveAt?: string;
+  lastSuccessfulToolExecutionAt?: string;
+  lastCommunicationAt?: string;
+}
+
+export interface AgentTemplateConfig {
+  agentId: string;
+  systemPrompt: string;
+  budgetUsd: number;
+  maxIterations: number;
+}
+
+export interface TaskTemplate {
+  id: string;
+  name: string;
+  description: string;
+  targetTaskTitle: string;
+  targetTaskDescription: string;
+  priority: 'low' | 'medium' | 'high';
+  agentConfigs: AgentTemplateConfig[];
 }
 
 export type TaskEventType =
