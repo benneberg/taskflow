@@ -670,6 +670,32 @@ function seedMetricsForAgents() {
   });
 }
 
+let isWriting = false;
+let pendingWrite = false;
+
+function saveStateToDisk() {
+  if (isWriting) {
+    pendingWrite = true;
+    return;
+  }
+  isWriting = true;
+  fs.writeFile(
+    DATA_STORE_PATH,
+    JSON.stringify({ tasks, agents, events, gates, transactions, thermalConfig, templates }, null, 2),
+    "utf8",
+    (err) => {
+      isWriting = false;
+      if (err) {
+        console.error("Failed to write state to disk:", err);
+      }
+      if (pendingWrite) {
+        pendingWrite = false;
+        saveStateToDisk();
+      }
+    }
+  );
+}
+
 // Load or Seed state
 if (fs.existsSync(DATA_STORE_PATH)) {
   try {
@@ -698,32 +724,6 @@ if (fs.existsSync(DATA_STORE_PATH)) {
   seedTemplates();
   seedMetricsForAgents();
   saveStateToDisk();
-}
-
-let isWriting = false;
-let pendingWrite = false;
-
-function saveStateToDisk() {
-  if (isWriting) {
-    pendingWrite = true;
-    return;
-  }
-  isWriting = true;
-  fs.writeFile(
-    DATA_STORE_PATH,
-    JSON.stringify({ tasks, agents, events, gates, transactions, thermalConfig, templates }, null, 2),
-    "utf8",
-    (err) => {
-      isWriting = false;
-      if (err) {
-        console.error("Failed to write state to disk:", err);
-      }
-      if (pendingWrite) {
-        pendingWrite = false;
-        saveStateToDisk();
-      }
-    }
-  );
 }
 
 // Global SSE connection registry for instant real-time broadcasts
