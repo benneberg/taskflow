@@ -14,16 +14,16 @@ This document maps immediate, short-term, and medium-term backlog tasks to trans
 ---
 
 ## 🔒 Security Backlog
-- [ ] **Enforce Operator Auth Handlers**: Add an API auth gate layer (JWT auth) to guard backend endpoints. [IN PROGRESS]
-- [ ] **Role-Based Client Views (RBAC)**: Differentiate operators from viewers on the client dashboard. [IN PROGRESS]
+- [x] **Enforce Operator Auth Handlers**: Add an API auth gate layer (JWT auth) to guard backend endpoints.
+- [x] **Role-Based Client Views (RBAC)**: Differentiate operators from viewers on the client dashboard.
 - [ ] **Secret Manager Integration**: Configure the server to load API keys dynamically from secure vaults (e.g. GCP Secret Manager) instead of unencrypted `.env` files.
 
 ---
 
 ## 🧪 Testing Backlog
-- [ ] **Add Unit Test Engine**: Create a custom automated test harness `/src/tests/run-assertions.ts` and set up `npm run test` inside `package.json`. [IN PROGRESS]
-- [ ] **Write Core Lifecycle Assertions**: Assert agent circuit breaker transitions and thermal models. [IN PROGRESS]
-- [ ] **Automated End-to-End API Integration tests**: Write tests running task operations through full-pipeline API controllers. [IN PROGRESS]
+- [x] **Add Unit Test Engine**: Create a custom automated test harness `/src/tests/run-assertions.ts` and set up `npm run test` inside `package.json`.
+- [x] **Write Core Lifecycle Assertions**: Assert agent circuit breaker transitions and thermal models.
+- [x] **Automated End-to-End API Integration tests**: Write tests running task operations through full-pipeline API controllers.
 
 ---
 

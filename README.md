@@ -11,7 +11,15 @@ The system establishes a clean **Control Plane / Data Plane Separation** support
 - **Orchestration Layer**: Simulated durable multi-stage pipelines mimicking Temporal.io timers, sagas, and state signals.
 - **Cognitive Reasoning**: Powered by server-side **Google Gemini AI Models** utilizing the official `@google/genai` TypeScript SDK with automatic high-fidelity offline fallbacks.
 - **Immutable Ledger**: Immutable event sourcing recording full system and model state mutations with optimistic concurrency control (OCC).
-- **Control Gateways**: Restricts budget allocations using thread-safe **Per-Agent Circuit Breakers**, real-time **Thermal Cost Throttling**, and a dynamic **30-Day Agent Performance Audit Bar Chart** built with `recharts`.
+- **Control Gateways & Security**: Restricts budget allocations using thread-safe **Per-Agent Circuit Breakers**, real-time **Thermal Cost Throttling**, a dynamic **30-Day Agent Performance Audit Bar Chart** built with `recharts`, and **Control Plane Role-Based JWT Security** requiring verification for administrative actions (e.g. task creation, approvals, config changes).
+
+---
+
+## 🔒 Control Plane Security (RBAC)
+
+TaskFlow AI features high-security **Control Plane & Data Plane Separation**:
+- **Observer Mode (Viewer)**: Accessible by default. Users have real-time read access to telemetry streams, blackboards, agent statistics, and log outputs.
+- **Operator Mode (Admin)**: Requires secure Bearer JWT verification (using a secret signature). Elevating to Operator Mode unlocks action-oriented administrative API controls: deploying tasks, manual approvals/rejections, altering agent budgets, and resetting circuit breakers.
 
 ---
 
@@ -87,13 +95,19 @@ npm run dev
 
 ## 🧪 Testing
 
-TaskFlow AI includes compiler and lint validations as part of its deployment pipeline.
+TaskFlow AI includes full-stack type checking, code style linters, and a custom state-machine and budget-contract automated assertion test suite.
 
-### Run Linter & Type Compilations
+### 1. Run High-Fidelity Automated Test Suite
+Executes unit tests verifying circuit breaker transitions, thermal cost model throttles, state-machine progressions, and optimistic concurrency control (OCC) ledger traces:
+```bash
+npm run test
+```
+
+### 2. Run Linter & Type Compilations
+Validates TypeScript syntax integrity across the codebase:
 ```bash
 npm run lint
 ```
-*For a detailed roadmap regarding Jest/Vitest unit testing integrations, please refer to `/TESTING_DELTA.md`.*
 
 ---
 

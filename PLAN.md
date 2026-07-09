@@ -37,8 +37,8 @@ This document maps out the comprehensive, production-grade security, testing, an
 
 ## 📅 Execution Roadmap
 
-1. **Create `PLAN.md`** & update `TODO.md` backlog checkpoints.
-2. **Implement Backend Auth Infrastructure**: Update `server.ts` to add authentication endpoint, JWT handling, and security middleware.
-3. **Refactor Client UI with RBAC**: Update `App.tsx` and components to support observer mode, locks, operator credentials, and active token persistence in localStorage.
-4. **Implement Test Harness**: Write `src/tests/run-assertions.ts` and update `package.json` to expose `npm run test`.
-5. **Verify and Harden**: Run linter, compiler, and the automated tests. Correct any discrepancies.
+1. **Create `PLAN.md`** & update `TODO.md` backlog checkpoints. [COMPLETED]
+2. **Implement Backend Auth Infrastructure**: Update `server.ts` to add authentication endpoint, JWT handling, and security middleware. [COMPLETED]
+3. **Refactor Client UI with RBAC**: Update `App.tsx` and components to support observer mode, locks, operator credentials, and active token persistence in localStorage. [COMPLETED]
+4. **Implement Test Harness**: Write `src/tests/run-assertions.ts` and update `package.json` to expose `npm run test`. [COMPLETED]
+5. **Verify and Harden**: Run linter, compiler, and the automated tests. Correct any discrepancies. [COMPLETED]
