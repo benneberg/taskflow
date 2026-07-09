@@ -20,7 +20,14 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
-  BarChart3
+  BarChart3,
+  Lock,
+  Unlock,
+  Users,
+  Bot,
+  Sparkles,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 interface CommandCenterProps {
@@ -58,6 +65,161 @@ export default function CommandCenter({
   const [copiedCode, setCopiedCode] = useState(false);
   const [changesComment, setChangesComment] = useState('');
   const [submittingChanges, setSubmittingChanges] = useState(false);
+
+  // Agent Collaboration States
+  const [collabTab, setCollabTab] = useState<'scratchpad' | 'messenger'>('scratchpad');
+  const [scratchpadText, setScratchpadText] = useState('');
+  const [activeLock, setActiveLock] = useState<string | null>(null);
+  const [senderIdentity, setSenderIdentity] = useState('user');
+  const [recipientAgent, setRecipientAgent] = useState('agent-backend-dev');
+  const [msgProtocol, setMsgProtocol] = useState<'HANDSHAKE_REQUEST' | 'DATA_TRANSMISSION' | 'QA_ALERT' | 'COLLABORATION_NOTE'>('COLLABORATION_NOTE');
+  const [draftMessage, setDraftMessage] = useState('');
+  const [collabError, setCollabError] = useState<string | null>(null);
+  const [isConsulting, setIsConsulting] = useState(false);
+
+  // Synchronize state when selectedTask changes
+  React.useEffect(() => {
+    if (selectedTask) {
+      setScratchpadText(selectedTask.scratchpad || '');
+      setActiveLock(selectedTask.scratchpadLockedBy || null);
+    }
+  }, [selectedTask?.id]);
+
+  // Keep selectedTask in sync with parent updates (e.g. SSE stream broadcasts)
+  React.useEffect(() => {
+    if (selectedTask) {
+      const updated = tasks.find(t => t.id === selectedTask.id);
+      if (updated) {
+        // Only update if there are physical changes to prevent infinite re-renders
+        if (
+          updated.scratchpad !== selectedTask.scratchpad ||
+          updated.scratchpadLockedBy !== selectedTask.scratchpadLockedBy ||
+          (updated.directMessages?.length || 0) !== (selectedTask.directMessages?.length || 0) ||
+          updated.status !== selectedTask.status
+        ) {
+          setSelectedTask(updated);
+        }
+      }
+    }
+  }, [tasks, selectedTask?.id]);
+
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('taskflow_operator_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  };
+
+  const handleSaveScratchpad = async () => {
+    if (!selectedTask) return;
+    try {
+      setCollabError(null);
+      const response = await fetch(`/api/v1/tasks/${selectedTask.id}/scratchpad`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({ content: scratchpadText, lockedBy: senderIdentity })
+      });
+      if (response.status === 401 || response.status === 403) {
+        setCollabError("Access restricted. Please sign in as Operator.");
+        return;
+      }
+      if (response.status === 409) {
+        const errData = await response.json();
+        setCollabError(errData.error);
+        return;
+      }
+      const data = await response.json();
+      setSelectedTask(data.task);
+    } catch (err) {
+      console.error("Failed to save scratchpad:", err);
+      setCollabError("Network error saving sandbox.");
+    }
+  };
+
+  const handleToggleLock = async () => {
+    if (!selectedTask) return;
+    try {
+      setCollabError(null);
+      const nextLock = activeLock ? null : senderIdentity;
+      const response = await fetch(`/api/v1/tasks/${selectedTask.id}/scratchpad/lock`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({ lockedBy: nextLock })
+      });
+      if (response.status === 401 || response.status === 403) {
+        setCollabError("Access restricted. Please sign in as Operator.");
+        return;
+      }
+      if (response.status === 409) {
+        const errData = await response.json();
+        setCollabError(errData.error);
+        return;
+      }
+      const data = await response.json();
+      setSelectedTask(data.task);
+    } catch (err) {
+      console.error("Failed to toggle lock:", err);
+      setCollabError("Network error toggling lock state.");
+    }
+  };
+
+  const handleSendDirectMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTask || !draftMessage.trim()) return;
+    try {
+      setCollabError(null);
+      const response = await fetch(`/api/v1/tasks/${selectedTask.id}/messages`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({
+          senderId: senderIdentity,
+          recipientId: recipientAgent,
+          protocol: msgProtocol,
+          content: draftMessage
+        })
+      });
+      if (response.status === 401 || response.status === 403) {
+        setCollabError("Access restricted. Please sign in as Operator.");
+        return;
+      }
+      const data = await response.json();
+      setSelectedTask(data.task);
+      setDraftMessage('');
+    } catch (err) {
+      console.error("Failed to send direct message:", err);
+      setCollabError("Network error dispatching message.");
+    }
+  };
+
+  const handleTriggerAiDebate = async () => {
+    if (!selectedTask) return;
+    try {
+      setCollabError(null);
+      setIsConsulting(true);
+      const response = await fetch(`/api/v1/tasks/${selectedTask.id}/collaboration/discuss`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      if (response.status === 401 || response.status === 403) {
+        setCollabError("Access restricted. Please sign in as Operator.");
+        return;
+      }
+      const data = await response.json();
+      setSelectedTask(data.task);
+    } catch (err) {
+      console.error("Failed to start AI debate:", err);
+      setCollabError("Network error starting debate.");
+    } finally {
+      setIsConsulting(false);
+    }
+  };
   
   // Form State
   const [newTitle, setNewTitle] = useState('');
@@ -519,6 +681,278 @@ export default function CommandCenter({
                 <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 border border-slate-200/60 p-3.5 rounded-xl">
                   {selectedTask.description}
                 </p>
+              </div>
+
+              {/* AGENT COLLABORATION HUB & SANDBOX */}
+              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-4 shadow-2xs">
+                
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 bg-indigo-50 border border-indigo-100 rounded-lg text-indigo-600">
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-sans font-bold text-xs text-slate-800 tracking-tight">Agent Collaboration Hub</h4>
+                      <p className="text-[9px] text-slate-400 font-mono">Real-time inter-agent message logs and lockable write sandboxes</p>
+                    </div>
+                  </div>
+                  
+                  {/* Persona simulation selector */}
+                  <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-2.5 py-1 rounded-xl text-[10px]">
+                    <span className="text-slate-400 font-mono">Speak as:</span>
+                    <select
+                      value={senderIdentity}
+                      onChange={(e) => setSenderIdentity(e.target.value)}
+                      className="font-sans font-bold text-slate-700 bg-transparent border-none focus:outline-none focus:ring-0 cursor-pointer"
+                    >
+                      <option value="user">Operator (You)</option>
+                      <option value="agent-product-manager">Pat (PM)</option>
+                      <option value="agent-backend-dev">Alex (Backend Dev)</option>
+                      <option value="agent-frontend-dev">Chloe (Frontend Dev)</option>
+                      <option value="agent-qa-reviewer">Dave (QA Auditor)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Sub Tab selection */}
+                <div className="flex bg-slate-200/50 p-1 rounded-xl gap-1">
+                  <button
+                    onClick={() => { setCollabTab('scratchpad'); setCollabError(null); }}
+                    className={`flex-1 py-1.5 text-center font-sans text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${
+                      collabTab === 'scratchpad'
+                        ? 'bg-white text-indigo-600 shadow-3xs font-bold'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Scratchpad Sandbox
+                  </button>
+                  <button
+                    onClick={() => { setCollabTab('messenger'); setCollabError(null); }}
+                    className={`flex-1 py-1.5 text-center font-sans text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${
+                      collabTab === 'messenger'
+                        ? 'bg-white text-indigo-600 shadow-3xs font-bold'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Direct Messenger ({selectedTask.directMessages?.length || 0})
+                  </button>
+                </div>
+
+                {/* Error Banner */}
+                {collabError && (
+                  <div className="flex items-start gap-2 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[10px] text-rose-700 font-semibold font-mono animate-pulse-subtle">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                    <span>{collabError}</span>
+                  </div>
+                )}
+
+                {/* TAB 1: SCRATCHPAD SANDBOX */}
+                {collabTab === 'scratchpad' && (
+                  <div className="space-y-3.5 animate-fadeIn">
+                    
+                    {/* Lock Status Info */}
+                    <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200/80 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        {activeLock ? (
+                          <div className="flex items-center gap-1.5 text-amber-600 font-mono text-[10px] font-bold">
+                            <Lock className="w-3.5 h-3.5 animate-pulse" />
+                            <span>LOCKED BY: {
+                              activeLock === 'user' ? 'Operator' : 
+                              activeLock === 'agent-product-manager' ? 'Pat (PM)' :
+                              activeLock === 'agent-backend-dev' ? 'Alex (Backend Dev)' :
+                              activeLock === 'agent-frontend-dev' ? 'Chloe (Frontend Dev)' :
+                              activeLock === 'agent-qa-reviewer' ? 'Dave (QA)' : activeLock
+                            }</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-emerald-600 font-mono text-[10px] font-bold">
+                            <Unlock className="w-3.5 h-3.5" />
+                            <span>UNLOCKED: Shared Workspace</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Lock controls */}
+                      <button
+                        onClick={handleToggleLock}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg font-sans text-[10px] font-bold transition-all shadow-3xs cursor-pointer ${
+                          activeLock
+                            ? activeLock === senderIdentity
+                              ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100'
+                              : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                            : 'bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100'
+                        }`}
+                        disabled={!!activeLock && activeLock !== senderIdentity}
+                        title={activeLock && activeLock !== senderIdentity ? "This workspace is locked by another agent" : ""}
+                      >
+                        {activeLock ? (
+                          activeLock === senderIdentity ? "Release Lock" : "Locked"
+                        ) : "Acquire Edit Lock"}
+                      </button>
+                    </div>
+
+                    {/* Shared Text Area */}
+                    <div className="relative">
+                      <textarea
+                        rows={6}
+                        value={scratchpadText}
+                        onChange={(e) => setScratchpadText(e.target.value)}
+                        placeholder="Define operational boundaries, schema specs, or direct agent execution notes..."
+                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-slate-800 text-xs font-mono focus:border-indigo-500 focus:outline-none transition-all resize-none leading-relaxed shadow-3xs"
+                        disabled={!!activeLock && activeLock !== senderIdentity}
+                      />
+                      {activeLock && activeLock !== senderIdentity && (
+                        <div className="absolute inset-0 bg-slate-100/30 backdrop-blur-[0.5px] rounded-xl flex items-center justify-center">
+                          <p className="bg-slate-900/80 text-white text-[10px] font-mono px-3 py-1.5 rounded-lg shadow-md flex items-center gap-1.5">
+                            <Lock className="w-3.5 h-3.5" />
+                            Acquire Edit Lock to modify sandbox
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Save Action Button */}
+                    <div className="flex justify-end">
+                      <button
+                        onClick={handleSaveScratchpad}
+                        disabled={!!activeLock && activeLock !== senderIdentity}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-400 text-white font-sans text-[10px] font-bold rounded-xl transition-all shadow-md shadow-indigo-600/5 cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Save Sandbox State
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: DIRECT MESSENGER */}
+                {collabTab === 'messenger' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    
+                    {/* Top Action buttons */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wide font-bold">Communication Logs</span>
+                      <button
+                        onClick={handleTriggerAiDebate}
+                        disabled={isConsulting}
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-600 font-sans text-[10px] font-bold rounded-xl transition-all shadow-3xs cursor-pointer disabled:opacity-60"
+                      >
+                        {isConsulting ? (
+                          <>
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                            Consulting Squad...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3 h-3 text-indigo-500" />
+                            Simulate AI Consult Debate
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Scrolling message feed */}
+                    <div className="max-h-48 overflow-y-auto space-y-2.5 border border-slate-200 rounded-xl p-3 bg-white shadow-3xs">
+                      {selectedTask.directMessages && selectedTask.directMessages.length > 0 ? (
+                        [...selectedTask.directMessages].reverse().map((msg: any) => {
+                          // Determine protocol styles
+                          let protocolBadge = 'bg-slate-50 text-slate-600 border-slate-200';
+                          if (msg.protocol === 'HANDSHAKE_REQUEST') protocolBadge = 'bg-blue-50 text-blue-700 border-blue-200';
+                          if (msg.protocol === 'DATA_TRANSMISSION') protocolBadge = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                          if (msg.protocol === 'QA_ALERT') protocolBadge = 'bg-rose-50 text-rose-700 border-rose-200';
+
+                          return (
+                            <div key={msg.id} className="p-2.5 bg-slate-50/50 border border-slate-100 rounded-xl space-y-1.5 hover:bg-slate-50 transition-colors">
+                              {/* Message Header */}
+                              <div className="flex items-center justify-between text-[10px]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-800">{msg.senderName}</span>
+                                  <span className="text-slate-400">➜</span>
+                                  <span className="text-slate-600 font-semibold">{msg.recipientName}</span>
+                                </div>
+                                <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border ${protocolBadge}`}>
+                                  {msg.protocol}
+                                </span>
+                              </div>
+                              
+                              {/* Message Content */}
+                              <p className="text-[11px] text-slate-700 font-sans leading-relaxed break-words pl-0.5">
+                                {msg.content}
+                              </p>
+                              
+                              {/* Timestamp */}
+                              <div className="flex justify-end text-[8px] font-mono text-slate-400">
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-8 text-center text-slate-400">
+                          <Bot className="w-7 h-7 text-slate-300 animate-bounce mb-1.5" />
+                          <p className="text-[10px] font-mono uppercase tracking-wider">No Agent Comms Dispatched</p>
+                          <p className="text-[9px] text-slate-400 mt-1">Start simulated debate or compose a direct transmission.</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Compose Messenger Section */}
+                    <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl space-y-3">
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {/* Recipient Agent Selector */}
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-mono text-slate-500 uppercase font-bold">Recipient Agent</label>
+                          <select
+                            value={recipientAgent}
+                            onChange={(e) => setRecipientAgent(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-sans font-bold text-slate-700 cursor-pointer"
+                          >
+                            <option value="user">Operator (Human)</option>
+                            <option value="agent-product-manager">Pat (PM)</option>
+                            <option value="agent-backend-dev">Alex (Backend Dev)</option>
+                            <option value="agent-frontend-dev">Chloe (Frontend Dev)</option>
+                            <option value="agent-qa-reviewer">Dave (QA Auditor)</option>
+                            <option value="agent-ceo">Sam (CEO)</option>
+                          </select>
+                        </div>
+
+                        {/* Communication Protocol Selector */}
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-mono text-slate-500 uppercase font-bold">Protocol Type</label>
+                          <select
+                            value={msgProtocol}
+                            onChange={(e: any) => setMsgProtocol(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-mono font-bold text-slate-700 cursor-pointer"
+                          >
+                            <option value="COLLABORATION_NOTE">COLLABORATION_NOTE</option>
+                            <option value="DATA_TRANSMISSION">DATA_TRANSMISSION</option>
+                            <option value="QA_ALERT">QA_ALERT</option>
+                            <option value="HANDSHAKE_REQUEST">HANDSHAKE_REQUEST</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Text Draft Compose Input */}
+                      <form onSubmit={handleSendDirectMessage} className="flex gap-2">
+                        <input
+                          type="text"
+                          required
+                          placeholder="Type direct transmission message..."
+                          value={draftMessage}
+                          onChange={(e) => setDraftMessage(e.target.value)}
+                          className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 text-xs focus:outline-none transition-all shadow-3xs"
+                        />
+                        <button
+                          type="submit"
+                          className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center shrink-0"
+                        >
+                          <Send size={14} />
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* OPERATOR HITL ACTION CONTROLS */}

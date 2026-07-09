@@ -10,6 +10,17 @@ export type TaskStatus =
   | 'COMPLETED'
   | 'FAILED';
 
+export interface DirectMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  recipientId: string;
+  recipientName: string;
+  protocol: 'HANDSHAKE_REQUEST' | 'DATA_TRANSMISSION' | 'QA_ALERT' | 'COLLABORATION_NOTE';
+  content: string;
+  timestamp: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -24,6 +35,10 @@ export interface Task {
   qaReview?: string;
   productBrief?: string;
   strategicSignoff?: string;
+  scratchpad?: string;
+  scratchpadLockedBy?: string | null;
+  scratchpadLockedAt?: string | null;
+  directMessages?: DirectMessage[];
 }
 
 export type CircuitBreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';

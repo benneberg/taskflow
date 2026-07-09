@@ -459,6 +459,13 @@ export default function CosmicChat() {
     }
   ];
 
+  tasks.forEach(t => {
+    t.scratchpad = t.scratchpad || "### Agent Collaboration Sandbox\n*Shared workspace for system plans, code drafts, and debug sessions.*\n\nFeel free to write notes, outline schemas, or collaborate here.";
+    t.scratchpadLockedBy = t.scratchpadLockedBy || null;
+    t.scratchpadLockedAt = t.scratchpadLockedAt || null;
+    t.directMessages = t.directMessages || [];
+  });
+
   recalculateThermalAndUsage();
 }
 
@@ -701,6 +708,14 @@ if (fs.existsSync(DATA_STORE_PATH)) {
   try {
     const backup = JSON.parse(fs.readFileSync(DATA_STORE_PATH, "utf8"));
     tasks = backup.tasks || [];
+    tasks.forEach(t => {
+      if (t.scratchpad === undefined) {
+        t.scratchpad = "### Agent Collaboration Sandbox\n*Shared workspace for system plans, code drafts, and debug sessions.*\n\nFeel free to write notes, outline schemas, or collaborate here.";
+      }
+      if (t.scratchpadLockedBy === undefined) t.scratchpadLockedBy = null;
+      if (t.scratchpadLockedAt === undefined) t.scratchpadLockedAt = null;
+      if (t.directMessages === undefined) t.directMessages = [];
+    });
     agents = backup.agents || [];
     events = backup.events || [];
     gates = backup.gates || [];
@@ -1568,6 +1583,35 @@ async function runCeoSignoffPhase(taskId: string) {
   });
 }
 
+// --- OPERATOR AUTHENTICATION MIDDLEWARE ---
+const OPERATOR_TOKEN_SECRET = "tf_token_98234792374982734";
+
+function requireOperator(req: any, res: any, next: any) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Access denied. Authentication token required." });
+  }
+  const token = authHeader.split(" ")[1];
+  if (token !== OPERATOR_TOKEN_SECRET) {
+    return res.status(403).json({ error: "Invalid or expired operator credentials." });
+  }
+  next();
+}
+
+app.post("/api/v1/auth/login", (req, res) => {
+  const { password } = req.body;
+  const expectedPassword = process.env.OPERATOR_PASSWORD || "admin123";
+  if (password === expectedPassword) {
+    res.json({
+      token: OPERATOR_TOKEN_SECRET,
+      role: "operator",
+      user: "Operator (Admin)"
+    });
+  } else {
+    res.status(401).json({ error: "Invalid operator password credentials." });
+  }
+});
+
 // REST API Routes
 
 // List templates
@@ -1576,7 +1620,7 @@ app.get("/api/v1/templates", (req, res) => {
 });
 
 // Create/save a template
-app.post("/api/v1/templates", (req, res) => {
+app.post("/api/v1/templates", requireOperator, (req, res) => {
   const { name, description, targetTaskTitle, targetTaskDescription, priority, agentConfigs } = req.body;
   if (!name || !agentConfigs || !Array.isArray(agentConfigs)) {
     return res.status(400).json({ error: "Template name and agentConfigs are required." });
@@ -1599,7 +1643,7 @@ app.post("/api/v1/templates", (req, res) => {
 });
 
 // Create a task
-app.post("/api/v1/tasks", (req, res) => {
+app.post("/api/v1/tasks", requireOperator, (req, res) => {
   const { title, description, priority, deadline, templateId } = req.body;
   if (!title || !description) {
     return res.status(400).json({ error: "Title and description are required." });
@@ -1635,7 +1679,11 @@ app.post("/api/v1/tasks", (req, res) => {
     priority: priority || "medium",
     deadline: deadline || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    scratchpad: "### Agent Collaboration Sandbox\n*Shared workspace for system plans, code drafts, and debug sessions.*\n\nFeel free to write notes, outline schemas, or collaborate here.",
+    scratchpadLockedBy: null,
+    scratchpadLockedAt: null,
+    directMessages: []
   };
 
   tasks.push(newTask);
@@ -1672,7 +1720,7 @@ app.get("/api/v1/tasks/:id/events", (req, res) => {
 });
 
 // Human Approval Sign-off (APPROVE signal)
-app.post("/api/v1/tasks/:id/approve", (req, res) => {
+app.post("/api/v1/tasks/:id/approve", requireOperator, (req, res) => {
   const task = tasks.find(t => t.id === req.params.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
@@ -1706,7 +1754,7 @@ app.post("/api/v1/tasks/:id/approve", (req, res) => {
 });
 
 // Human Rejection (REJECT signal)
-app.post("/api/v1/tasks/:id/reject", (req, res) => {
+app.post("/api/v1/tasks/:id/reject", requireOperator, (req, res) => {
   const task = tasks.find(t => t.id === req.params.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
@@ -1730,7 +1778,7 @@ app.post("/api/v1/tasks/:id/reject", (req, res) => {
 });
 
 // Request Changes (REQUEST_CHANGES signal)
-app.post("/api/v1/tasks/:id/request-changes", (req, res) => {
+app.post("/api/v1/tasks/:id/request-changes", requireOperator, (req, res) => {
   const task = tasks.find(t => t.id === req.params.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
@@ -1760,7 +1808,7 @@ app.post("/api/v1/tasks/:id/request-changes", (req, res) => {
 });
 
 // Terminate Task (TERMINATE signal)
-app.post("/api/v1/tasks/:id/terminate", (req, res) => {
+app.post("/api/v1/tasks/:id/terminate", requireOperator, (req, res) => {
   const task = tasks.find(t => t.id === req.params.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
@@ -1779,7 +1827,7 @@ app.get("/api/v1/agents", (req, res) => {
 });
 
 // Update agent budget / config in Expert Studio
-app.put("/api/v1/agents/:id", (req, res) => {
+app.put("/api/v1/agents/:id", requireOperator, (req, res) => {
   const agent = agents.find(a => a.id === req.params.id);
   if (!agent) return res.status(404).json({ error: "Agent not found" });
 
@@ -1802,7 +1850,7 @@ app.put("/api/v1/agents/:id", (req, res) => {
 });
 
 // Reset agent circuit breaker manually
-app.post("/api/v1/agents/:id/reset-circuit-breaker", (req, res) => {
+app.post("/api/v1/agents/:id/reset-circuit-breaker", requireOperator, (req, res) => {
   const agent = agents.find(a => a.id === req.params.id);
   if (!agent) return res.status(404).json({ error: "Agent not found" });
 
@@ -1818,7 +1866,7 @@ app.post("/api/v1/agents/:id/reset-circuit-breaker", (req, res) => {
 });
 
 // Simulate agent deadlock / autonomous stalled process
-app.post("/api/v1/agents/:id/simulate-deadlock", (req, res) => {
+app.post("/api/v1/agents/:id/simulate-deadlock", requireOperator, (req, res) => {
   const agent = agents.find(a => a.id === req.params.id);
   if (!agent) return res.status(404).json({ error: "Agent not found" });
 
@@ -1837,7 +1885,7 @@ app.post("/api/v1/agents/:id/simulate-deadlock", (req, res) => {
 });
 
 // Recover/Resolve agent deadlock with a heartbeat ping
-app.post("/api/v1/agents/:id/ping-heartbeat", (req, res) => {
+app.post("/api/v1/agents/:id/ping-heartbeat", requireOperator, (req, res) => {
   const agent = agents.find(a => a.id === req.params.id);
   if (!agent) return res.status(404).json({ error: "Agent not found" });
 
@@ -1889,12 +1937,217 @@ app.get("/api/v1/budget", (req, res) => {
   });
 });
 
+// --- AGENT COLLABORATION & SHARED SANDBOX ENDPOINTS ---
+
+// Update scratchpad content
+app.put("/api/v1/tasks/:id/scratchpad", requireOperator, (req, res) => {
+  const task = tasks.find(t => t.id === req.params.id);
+  if (!task) return res.status(404).json({ error: "Task not found" });
+
+  const { content, lockedBy } = req.body;
+
+  // Handle potential race conditions: check if locked by someone else
+  if (task.scratchpadLockedBy && task.scratchpadLockedBy !== lockedBy) {
+    return res.status(409).json({
+      error: `Race Condition Avoided: Scratchpad is currently locked by ${task.scratchpadLockedBy}. Your update was rejected.`
+    });
+  }
+
+  task.scratchpad = content || "";
+  task.updatedAt = new Date().toISOString();
+  saveStateToDisk();
+
+  broadcastToClients("TASK_UPDATED", task);
+  res.json({ message: "Scratchpad updated successfully", task });
+});
+
+// Lock or unlock scratchpad
+app.post("/api/v1/tasks/:id/scratchpad/lock", (req, res) => {
+  const task = tasks.find(t => t.id === req.params.id);
+  if (!task) return res.status(404).json({ error: "Task not found" });
+
+  const { lockedBy } = req.body;
+
+  if (lockedBy) {
+    // Attempting to lock: check if already locked by another agent
+    if (task.scratchpadLockedBy && task.scratchpadLockedBy !== lockedBy) {
+      return res.status(409).json({
+        error: `Lock acquisition failed: Scratchpad is already locked by ${task.scratchpadLockedBy}.`
+      });
+    }
+    task.scratchpadLockedBy = lockedBy;
+    task.scratchpadLockedAt = new Date().toISOString();
+  } else {
+    // Unlock request
+    task.scratchpadLockedBy = null;
+    task.scratchpadLockedAt = null;
+  }
+
+  task.updatedAt = new Date().toISOString();
+  saveStateToDisk();
+
+  broadcastToClients("TASK_UPDATED", task);
+  res.json({ message: "Lock state updated successfully", task });
+});
+
+// Send a direct message between agents (or human operator)
+app.post("/api/v1/tasks/:id/messages", (req, res) => {
+  const task = tasks.find(t => t.id === req.params.id);
+  if (!task) return res.status(404).json({ error: "Task not found" });
+
+  const { senderId, recipientId, protocol, content } = req.body;
+  if (!senderId || !recipientId || !protocol || !content) {
+    return res.status(400).json({ error: "Missing required fields (senderId, recipientId, protocol, content)." });
+  }
+
+  const senderName = senderId === 'user' ? 'Operator (Human)' : (agents.find(a => a.id === senderId)?.name || senderId);
+  const recipientName = recipientId === 'user' ? 'Operator (Human)' : (agents.find(a => a.id === recipientId)?.name || recipientId);
+
+  const newMessage = {
+    id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    senderId,
+    senderName,
+    recipientId,
+    recipientName,
+    protocol,
+    content,
+    timestamp: new Date().toISOString()
+  };
+
+  task.directMessages = task.directMessages || [];
+  task.directMessages.push(newMessage);
+  task.updatedAt = new Date().toISOString();
+  saveStateToDisk();
+
+  broadcastToClients("TASK_UPDATED", task);
+  res.status(201).json({ message: "Direct message dispatched", newMessage, task });
+});
+
+// Simulate / Generate an AI Discussion using Gemini or procedural fallback
+app.post("/api/v1/tasks/:id/collaboration/discuss", async (req, res) => {
+  const task = tasks.find(t => t.id === req.params.id);
+  if (!task) return res.status(404).json({ error: "Task not found" });
+
+  let responseText = "";
+  if (ai) {
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: `You are simulating a direct, highly-focused technical developer conversation between Pioneer autonomous agents working on the task: "${task.title}" (Description: "${task.description}").
+        Generate a realistic, short sequence of exactly 3 professional direct messages where the agents exchange intermediate ideas, ask for clarifications, or report QA findings outside of the main workflow loops.
+        
+        Available agents:
+        - 'agent-backend-dev' (Alex, Backend Dev)
+        - 'agent-frontend-dev' (Chloe, Frontend Dev)
+        - 'agent-qa-reviewer' (Dave, QA Auditor)
+        - 'agent-product-manager' (Pat, PM)
+        
+        Choose the senderId and recipientId only from those listed above.
+        Choose a protocol for each message from: 'HANDSHAKE_REQUEST', 'DATA_TRANSMISSION', 'QA_ALERT', 'COLLABORATION_NOTE'.
+        
+        Respond ONLY with a valid, clean JSON array of objects conforming EXACTLY to this schema, without any markdown code block wraps:
+        [
+          {
+            "senderId": "agent-backend-dev",
+            "recipientId": "agent-frontend-dev",
+            "protocol": "DATA_TRANSMISSION",
+            "content": "Chloe, I've exposed the endpoints on /api/v1/auth/register..."
+          }
+        ]`,
+      });
+      responseText = response.text || "";
+    } catch (err) {
+      console.error("Gemini failed to generate discussion, will use fallback:", err);
+    }
+  }
+
+  let messagesToInsert = [];
+  if (responseText) {
+    try {
+      let cleanJson = responseText.trim();
+      if (cleanJson.startsWith("```json")) {
+        cleanJson = cleanJson.substring(7);
+      }
+      if (cleanJson.startsWith("```")) {
+        cleanJson = cleanJson.substring(3);
+      }
+      if (cleanJson.endsWith("```")) {
+        cleanJson = cleanJson.substring(0, cleanJson.length - 3);
+      }
+      cleanJson = cleanJson.trim();
+      const parsed = JSON.parse(cleanJson);
+      if (Array.isArray(parsed)) {
+        messagesToInsert = parsed.map(msg => {
+          const senderName = agents.find(a => a.id === msg.senderId)?.name || msg.senderId;
+          const recipientName = agents.find(a => a.id === msg.recipientId)?.name || msg.recipientId;
+          return {
+            id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            senderId: msg.senderId || 'agent-backend-dev',
+            senderName,
+            recipientId: msg.recipientId || 'agent-frontend-dev',
+            recipientName,
+            protocol: msg.protocol || 'COLLABORATION_NOTE',
+            content: msg.content || '',
+            timestamp: new Date().toISOString()
+          };
+        });
+      }
+    } catch (parseErr) {
+      console.error("Failed to parse LLM response JSON:", parseErr);
+    }
+  }
+
+  if (messagesToInsert.length === 0) {
+    // Generate beautiful custom procedural fallback dialogue based on task details
+    messagesToInsert = [
+      {
+        id: `msg-${Date.now()}-f1`,
+        senderId: "agent-backend-dev",
+        senderName: "Alex",
+        recipientId: "agent-frontend-dev",
+        recipientName: "Chloe",
+        protocol: "DATA_TRANSMISSION",
+        content: `Chloe, regarding "${task.title}": I've mapped out the state fields and prepared local mock APIs. Check out the shared task scratchpad for schema and specs!`,
+        timestamp: new Date().toISOString()
+      },
+      {
+        id: `msg-${Date.now()}-f2`,
+        senderId: "agent-frontend-dev",
+        senderName: "Chloe",
+        recipientId: "agent-qa-reviewer",
+        recipientName: "Dave",
+        protocol: "COLLABORATION_NOTE",
+        content: `Dave, I'm fetching Alex's schemas and integrating glassmorphic motion structures. Feel free to review once complete.`,
+        timestamp: new Date().toISOString()
+      },
+      {
+        id: `msg-${Date.now()}-f3`,
+        senderId: "agent-qa-reviewer",
+        senderName: "Dave",
+        recipientId: "agent-backend-dev",
+        recipientName: "Alex",
+        protocol: "QA_ALERT",
+        content: `Alex, regarding boundary limits on "${task.title}": make sure the server catches empty inputs gracefully to prevent runtime rendering bugs.`,
+        timestamp: new Date().toISOString()
+      }
+    ];
+  }
+
+  task.directMessages = task.directMessages || [];
+  task.directMessages.push(...messagesToInsert);
+  task.updatedAt = new Date().toISOString();
+  saveStateToDisk();
+
+  broadcastToClients("TASK_UPDATED", task);
+  res.status(200).json({ message: "Discussion generated successfully", inserted: messagesToInsert, task });
+});
+
 // Get and update thermal config
 app.get("/api/v1/budget/thermal-config", (req, res) => {
   res.json(thermalConfig);
 });
 
-app.put("/api/v1/budget/thermal-config", (req, res) => {
+app.put("/api/v1/budget/thermal-config", requireOperator, (req, res) => {
   const { enabled } = req.body;
   if (enabled !== undefined) thermalConfig.enabled = !!enabled;
   saveStateToDisk();
