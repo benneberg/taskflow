@@ -4,6 +4,7 @@ import CommandCenter from './components/CommandCenter';
 import ExpertStudio from './components/ExpertStudio';
 import BudgetLedger from './components/BudgetLedger';
 import ThoughtStream from './components/ThoughtStream';
+import EnterpriseInfra from './components/EnterpriseInfra';
 import {
   Activity,
   Terminal,
@@ -18,7 +19,8 @@ import {
   RefreshCw,
   Lock,
   Unlock,
-  Key
+  Key,
+  Server
 } from 'lucide-react';
 
 export default function App() {
@@ -45,7 +47,7 @@ export default function App() {
     spendByAgent: {}
   });
 
-  const [activeTab, setActiveTab] = useState<'command' | 'studio' | 'ledger' | 'stream'>('command');
+  const [activeTab, setActiveTab] = useState<'command' | 'studio' | 'ledger' | 'stream' | 'infra'>('command');
   const [sseConnected, setSseConnected] = useState<boolean>(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -419,7 +421,8 @@ export default function App() {
             { id: 'command', label: 'Command Center', icon: LayoutGrid },
             { id: 'studio', label: 'Expert Studio', icon: Cpu },
             { id: 'ledger', label: 'Financial Ledger', icon: Coins },
-            { id: 'stream', label: 'Thought Stream', icon: Terminal }
+            { id: 'stream', label: 'Thought Stream', icon: Terminal },
+            { id: 'infra', label: 'Infra Mesh', icon: Server }
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -476,6 +479,10 @@ export default function App() {
 
           {activeTab === 'stream' && (
             <ThoughtStream events={events} />
+          )}
+
+          {activeTab === 'infra' && (
+            <EnterpriseInfra operatorToken={operatorToken} />
           )}
         </div>
 

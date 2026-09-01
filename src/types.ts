@@ -172,3 +172,144 @@ export interface DashboardMetrics {
   spendByModel: { [model: string]: number };
   spendByAgent: { [agentId: string]: number };
 }
+
+// --- Dynamic Secret Manager Interfaces ---
+export interface SecretManagerStatus {
+  provider: 'GCP_SECRET_MANAGER' | 'VAULT_KMS' | 'ENV_FALLBACK';
+  connected: boolean;
+  activeSecrets: {
+    geminiApiKeyConfigured: boolean;
+    geminiApiKeyMasked: string;
+    operatorPasswordConfigured: boolean;
+    secretVersion: string;
+    lastRotatedAt: string;
+  };
+  cacheTtlSeconds: number;
+  isDynamicRotationEnabled: boolean;
+}
+
+// --- Temporal.io Orchestration Engine Interfaces ---
+export type TemporalWorkflowStatus = 'RUNNING' | 'COMPLETED' | 'FAILED' | 'TIMED_OUT' | 'TERMINATED' | 'WAITING_SIGNAL';
+export type TemporalActivityStatus = 'PENDING' | 'EXECUTING' | 'COMPLETED' | 'FAILED' | 'RETRYING' | 'COMPENSATING';
+
+export interface TemporalActivity {
+  id: string;
+  name: string;
+  agentId: string;
+  status: TemporalActivityStatus;
+  startedAt: string;
+  completedAt?: string;
+  retryCount: number;
+  maxRetries: number;
+  durationMs?: number;
+  inputPayload?: any;
+  resultPayload?: any;
+  errorMessage?: string;
+}
+
+export interface TemporalWorkflowRun {
+  workflowId: string;
+  runId: string;
+  taskId: string;
+  workflowType: 'TaskExecutionWorkflow' | 'SecurityAuditWorkflow' | 'EmergencyRollbackWorkflow';
+  status: TemporalWorkflowStatus;
+  startedAt: string;
+  completedAt?: string;
+  currentStep: string;
+  activities: TemporalActivity[];
+  signalsReceived: string[];
+  sagaCompensationActive: boolean;
+}
+
+export interface TemporalEngineStatus {
+  connectorState: 'CONNECTED_LOCAL_RUNTIME' | 'TEMPORAL_SERVER_LIVE' | 'STANDBY';
+  namespace: string;
+  taskQueue: string;
+  activeWorkflowsCount: number;
+  completedWorkflowsCount: number;
+  sagaCompensationRate: number;
+}
+
+// --- LangGraph Execution Engine Interfaces ---
+export interface LangGraphNode {
+  id: string;
+  name: string;
+  type: 'agent' | 'evaluator' | 'tool' | 'gate' | 'router';
+  agentId?: string;
+  description: string;
+  status: 'IDLE' | 'ACTIVE' | 'PASSED' | 'FAILED' | 'SKIPPED';
+  iteration: number;
+  maxIterations: number;
+}
+
+export interface LangGraphEdge {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  conditionDescription?: string;
+  isConditional: boolean;
+  lastTraversedAt?: string;
+}
+
+export interface LangGraphState {
+  taskId: string;
+  currentStep: string;
+  currentNodeId: string;
+  iterationCount: number;
+  maxCycles: number;
+  history: Array<{
+    nodeId: string;
+    agentId?: string;
+    timestamp: string;
+    action: string;
+    outputSummary: string;
+  }>;
+  graphTopology: {
+    nodes: LangGraphNode[];
+    edges: LangGraphEdge[];
+  };
+}
+
+// --- Firecracker MicroVM Sandbox Interfaces ---
+export interface SandboxInstance {
+  id: string;
+  vmStatus: 'WARM_READY' | 'EXECUTING' | 'RECYCLING' | 'TERMINATED';
+  cpuLimitCores: number;
+  memoryLimitMb: number;
+  executionTimeoutMs: number;
+  uptimeSeconds: number;
+  totalExecutions: number;
+  lastExecutionAt?: string;
+}
+
+export interface SandboxSecurityScan {
+  passed: boolean;
+  score: number; // 0 to 100
+  forbiddenGlobalsDetected: string[];
+  networkPolicyViolation: boolean;
+  warnings: string[];
+}
+
+export interface SandboxExecutionResult {
+  executionId: string;
+  sandboxId: string;
+  language: 'typescript' | 'javascript' | 'python' | 'bash';
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  executionTimeMs: number;
+  memoryUsedMb: number;
+  securityScan: SandboxSecurityScan;
+  executedAt: string;
+}
+
+export interface FirecrackerSandboxPoolStatus {
+  poolCapacity: number;
+  warmInstances: number;
+  busyInstances: number;
+  totalExecutionsCount: number;
+  averageExecutionMs: number;
+  securityViolationsBlocked: number;
+  instances: SandboxInstance[];
+}
+

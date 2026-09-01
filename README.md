@@ -1,6 +1,6 @@
 # TaskFlow AI — Agentic Operating System (AOS)
 
-TaskFlow AI is a technical full-stack dashboard designed to manage AI from single-user "co-pilots" to an auditable **Autonomous Squad**. Engineering managers can deploy, audit, and direct specialized agentic developer teams executing workloads under strict budget contracts, Human-in-the-Loop (HITL) gates, and independent circuit breakers.
+TaskFlow AI is an enterprise-grade full-stack orchestration dashboard designed to govern multi-agent AI teams. Engineering leaders and operators can deploy, audit, and direct specialized agentic software squads executing workloads under strict budget contracts, Human-in-the-Loop (HITL) gates, per-agent circuit breakers, and sandboxed MicroVM runtime environments.
 
 ---
 
@@ -8,10 +8,13 @@ TaskFlow AI is a technical full-stack dashboard designed to manage AI from singl
 
 The system establishes a clean **Control Plane / Data Plane Separation** supporting resilient, distributed workflows:
 
-- **Orchestration Layer**: Simulated durable multi-stage pipelines mimicking Temporal.io timers, sagas, and state signals.
+- **Dynamic Secret Management**: Resolves API keys and credentials on-the-fly from multiple providers (GCP Secret Manager, HashiCorp Vault, Container Env) with zero-downtime runtime overrides and 5-minute LRU TTL caching.
+- **Temporal.io Workflow Engine**: Coordinates stateful, long-running pipelines with activity state transitions (`PENDING`, `EXECUTING`, `COMPLETED`, `COMPENSATING`, `FAILED`) and event-driven signals (`APPROVE_SIGNAL`, `REJECT_SIGNAL`, `REQUEST_CHANGES_SIGNAL`, `TERMINATE_SIGNAL`).
+- **LangGraph State-Graph Topology**: Directed acyclic multi-agent graph with discrete nodes (PM, Architect, Coder, QA Sandbox, CEO Governance, HITL Gate, Cloud Deploy).
+- **Firecracker MicroVM Sandbox Pool**: Runs agent-generated code inside isolated microVM slots with strict zero-trust AST security scanners blocking unauthorized globals (`process.exit`, `eval`, `fs`), memory caps, and execution timeout guards.
 - **Cognitive Reasoning**: Powered by server-side **Google Gemini AI Models** utilizing the official `@google/genai` TypeScript SDK with automatic high-fidelity offline fallbacks.
 - **Immutable Ledger**: Immutable event sourcing recording full system and model state mutations with optimistic concurrency control (OCC).
-- **Control Gateways & Security**: Restricts budget allocations using thread-safe **Per-Agent Circuit Breakers**, real-time **Thermal Cost Throttling**, a dynamic **30-Day Agent Performance Audit Bar Chart** built with `recharts`, and **Control Plane Role-Based JWT Security** requiring verification for administrative actions (e.g. task creation, approvals, config changes).
+- **Safety Gateways & Budgets**: Restricts budget allocations using thread-safe **Per-Agent Circuit Breakers**, real-time **Thermal Cost Throttling**, and dynamic **30-Day Agent Performance Analytics** built with `recharts`.
 
 ---
 
@@ -19,17 +22,19 @@ The system establishes a clean **Control Plane / Data Plane Separation** support
 
 TaskFlow AI features high-security **Control Plane & Data Plane Separation**:
 - **Observer Mode (Viewer)**: Accessible by default. Users have real-time read access to telemetry streams, blackboards, agent statistics, and log outputs.
-- **Operator Mode (Admin)**: Requires secure Bearer JWT verification (using a secret signature). Elevating to Operator Mode unlocks action-oriented administrative API controls: deploying tasks, manual approvals/rejections, altering agent budgets, and resetting circuit breakers.
+- **Operator Mode (Admin)**: Requires secure authentication. Elevating to Operator Mode unlocks action-oriented administrative API controls: deploying tasks, manual approvals/rejections, altering agent budgets, resetting circuit breakers, and configuring dynamic secret overrides.
 
 ---
 
 ## 🛠️ Pioneer Squad Agent Registry
 
-The operating system includes three pre-configured specialized software engineering agents:
+The operating system includes five specialized agentic roles:
 
-1. **Alex (Backend Developer Agent)**: Specialist in database schemas, APIs design, and architecture outlines.
-2. **Chloe (Frontend Developer Agent)**: Specialist in React states, Tailwind CSS elements, and smooth animations.
-3. **Dave (QA Reviewer Agent)**: Specialist in linting checks, typescript compilers, and color contrast audits.
+1. **Pat (Product Manager Agent)**: Synthesizes user specifications into concise agile product briefs and scope boundaries.
+2. **Alex (Backend Developer Agent)**: Formulates high-performance database schema indexes, API designs, and architectural plans.
+3. **Chloe (Frontend Developer Agent)**: Crafts responsive React components and Tailwind CSS interfaces.
+4. **Dave (QA Reviewer Agent)**: Performs security validation, AST compliance audits, and executes code within the Firecracker MicroVM isolate.
+5. **Sam (CEO / Governance Agent)**: Conducts strategic alignment reviews and corporate financial audits before requesting operator merge sign-offs.
 
 ---
 
@@ -37,21 +42,31 @@ The operating system includes three pre-configured specialized software engineer
 
 ```
 taskflow-ai/
-├── server.ts                 # Full-stack Express server with Gemini SDK & event loop
-├── SPEC.md                   # Full system technical specification sheet
-├── README.md                 # Project repository documentation
-├── package.json              # Dependencies and full-stack build scripts
-├── vite.config.ts            # Vite config file
+├── server.ts                       # Full-stack Express server with Gemini SDK, SSE & REST APIs
+├── SPEC.md                         # Full system technical specification sheet
+├── README.md                       # Project repository documentation
+├── PLAN.md                         # Enterprise refactoring & implementation roadmap
+├── TODO.md                         # Actionable backlog & milestone tracker
+├── package.json                    # Dependencies, test scripts, and build pipeline
+├── vite.config.ts                  # Vite config file
 └── src/
-    ├── main.tsx              # React mounting entry point
-    ├── App.tsx               # Primary dashboard controller and state subscriber
-    ├── types.ts              # Global TypeScript schemas (Tasks, Agents, Events)
-    ├── index.css             # Cosmic slate theme & Tailwind CSS styles
-    └── components/
-        ├── CommandCenter.tsx # Live Kanban board, task details, and HITL decision gates
-        ├── ExpertStudio.tsx  # Pioneer squad config & circuit breaker resets
-        ├── BudgetLedger.tsx  # Cost distribution charts & thermal throttling panels
-        └── ThoughtStream.tsx # Stream terminal showing OTel traces & event JSON payloads
+    ├── main.tsx                    # React mounting entry point
+    ├── App.tsx                     # Primary dashboard controller and state subscriber
+    ├── types.ts                    # Global TypeScript schemas (Tasks, Agents, Events, Infra)
+    ├── index.css                   # Refined cosmic theme & Tailwind CSS styles
+    ├── components/
+    │   ├── CommandCenter.tsx       # Live Kanban board, task details, and HITL decision gates
+    │   ├── ExpertStudio.tsx        # Pioneer squad config & circuit breaker resets
+    │   ├── BudgetLedger.tsx        # Cost distribution charts & thermal throttling panels
+    │   ├── ThoughtStream.tsx       # Stream terminal showing OTel traces & event JSON payloads
+    │   └── EnterpriseInfra.tsx     # Enterprise Mesh inspector (Secrets, Temporal, LangGraph, Firecracker)
+    ├── server/
+    │   ├── secret-manager.ts       # Dynamic multi-provider Secret Manager (GCP/Vault/Env)
+    │   ├── temporal-orchestrator.ts # Temporal.io workflow state machine & signal dispatcher
+    │   ├── langgraph-engine.ts     # LangGraph multi-agent DAG execution topology
+    │   └── firecracker-sandbox.ts  # MicroVM sandbox pool & zero-trust AST security scanner
+    └── tests/
+        └── run-assertions.ts       # Automated unit & integration test runner
 ```
 
 ---
@@ -72,32 +87,31 @@ Create a `.env` file in the project root:
 ```env
 # Google Gemini API Key (Optional. Robust simulation fallback is used if missing)
 GEMINI_API_KEY=your_gemini_api_key_here
+OPERATOR_PASSWORD=admin123
 ```
 
 ---
 
-## ⚙️ Development & Operational Usage
+## ⚙️ Operational Usage
 
 ### 1. Launch Development Server
-Starts the full-stack server with live hot-reloading:
 ```bash
 npm run dev
 ```
-*Note: The system binds to host `0.0.0.0` on port `3000` for seamless access.*
 
 ### 2. Perform Operational Workflows
 - **Deploy Task**: Create a software engineering task specifying priority and deadlines.
-- **Monitor the Blackboard**: Watch the agents brainstorm, write code, and run reviews in real-time inside the `Thought Stream & Traces` terminal.
+- **Inspect Infra Mesh**: Switch to the **Infra Mesh** tab to audit live Temporal workflows, LangGraph nodes, Firecracker microVM isolates, and dynamic secret providers.
 - **Govern Budget Constraints**: Lower an agent's USD allocation in the `Expert Studio` to witness the circuit breaker trip (`CLOSED` → `OPEN`) and halt executions.
-- **Human-in-the-Loop Sign-off**: Open a task awaiting approval to review Dave's QA report and select `Approve`, `Reject`, `Terminate`, or request revisions using the feedback form.
+- **Human-in-the-Loop Sign-off**: Open a task awaiting approval to review Dave's microVM audit and Sam's strategic review, and choose to `Approve`, `Reject`, `Terminate`, or request revisions.
 
 ---
 
 ## 🧪 Testing
 
-TaskFlow AI includes full-stack type checking, code style linters, and a custom state-machine and budget-contract automated assertion test suite.
+TaskFlow AI includes full-stack type checking, code style linters, and a custom automated assertion test suite.
 
-### 1. Run High-Fidelity Automated Test Suite
+### 1. Run Automated Test Suite
 Executes unit tests verifying circuit breaker transitions, thermal cost model throttles, state-machine progressions, and optimistic concurrency control (OCC) ledger traces:
 ```bash
 npm run test
@@ -112,8 +126,6 @@ npm run lint
 ---
 
 ## 🚀 Production Build & Deployment
-
-The codebase is pre-configured to build a production bundle ready for containerized hosting environments (such as Cloud Run):
 
 ### 1. Compile Assets & Bundle Server
 ```bash

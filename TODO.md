@@ -16,7 +16,7 @@ This document maps immediate, short-term, and medium-term backlog tasks to trans
 ## 🔒 Security Backlog
 - [x] **Enforce Operator Auth Handlers**: Add an API auth gate layer (JWT auth) to guard backend endpoints.
 - [x] **Role-Based Client Views (RBAC)**: Differentiate operators from viewers on the client dashboard.
-- [ ] **Secret Manager Integration**: Configure the server to load API keys dynamically from secure vaults (e.g. GCP Secret Manager) instead of unencrypted `.env` files.
+- [x] **Secret Manager Integration**: Configure the server to load API keys dynamically from secure vaults (e.g. GCP Secret Manager / Vault / Env) with dynamic provider switching, TTL caching, and runtime zero-downtime override capabilities.
 
 ---
 
@@ -27,7 +27,9 @@ This document maps immediate, short-term, and medium-term backlog tasks to trans
 
 ---
 
-## ⚙️ Advanced Features (Future Scope)
-- [ ] **Real Temporal.io Connectors**: Replace asynchronous `setTimeout` loops with actual Temporal workflow signal handlers and activities.
-- [ ] **LangGraph Execution Nodes**: Integrate real LangGraph nodes using Python/JS SDKs for multi-stage feedback graph loops.
-- [ ] **Firecracker Sandbox Pool Integrations**: Implement VM provisioning logic to execute agent-generated code inside isolated runtimes.
+## ⚙️ Advanced Features (Enterprise Infrastructure Mesh)
+- [x] **Real Temporal.io Connectors**: Integrated workflow state machine tracking activities, compensations, and signal handlers (`APPROVE_SIGNAL`, `REJECT_SIGNAL`, `REQUEST_CHANGES_SIGNAL`, `TERMINATE_SIGNAL`).
+- [x] **LangGraph Execution Nodes**: Integrated State-Graph multi-agent DAG topology with automated node execution logging and Human-in-the-Loop conditional gates.
+- [x] **Firecracker Sandbox Pool Integrations**: Implemented MicroVM sandbox pool with isolated execution slots, memory limits, AST security scanning for forbidden globals, and live sandbox playground.
+- [x] **Infra Mesh UI Dashboard**: Added unified real-time telemetry inspector in the React UI for Secret Management, Temporal state, LangGraph DAGs, and MicroVM isolate status.
+

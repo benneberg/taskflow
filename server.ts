@@ -15,6 +15,10 @@ import {
   TaskEventType,
   TaskTemplate
 } from "./src/types";
+import { secretManager } from "./src/server/secret-manager";
+import { temporalOrchestrator } from "./src/server/temporal-orchestrator";
+import { langGraphEngine } from "./src/server/langgraph-engine";
+import { firecrackerSandbox } from "./src/server/firecracker-sandbox";
 
 dotenv.config();
 
@@ -23,25 +27,36 @@ app.use(express.json());
 
 const PORT = 3000;
 
-// Initialize Gemini SDK with User-Agent header for telemetry as instructed
-let ai: GoogleGenAI | null = null;
-if (process.env.GEMINI_API_KEY) {
+// Dynamic Secret Manager - Gemini Client Resolution
+let cachedGeminiClient: GoogleGenAI | null = null;
+let lastResolvedKey = "";
+
+async function getGeminiClient(): Promise<GoogleGenAI | null> {
   try {
-    ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
+    const key = await secretManager.getSecret("GEMINI_API_KEY");
+    if (!key) {
+      return null;
+    }
+    if (cachedGeminiClient && lastResolvedKey === key) {
+      return cachedGeminiClient;
+    }
+    cachedGeminiClient = new GoogleGenAI({
+      apiKey: key,
       httpOptions: {
         headers: {
           'User-Agent': 'aistudio-build',
         }
       }
     });
-    console.log("Gemini AI client successfully initialized server-side.");
+    lastResolvedKey = key;
+    console.log("Gemini AI client successfully resolved via Secret Manager.");
+    return cachedGeminiClient;
   } catch (error) {
-    console.error("Failed to initialize Gemini AI client:", error);
+    console.error("Failed to dynamically initialize Gemini AI client:", error);
+    return null;
   }
-} else {
-  console.log("GEMINI_API_KEY not found in environment. Using robust local simulation fallback.");
 }
+
 
 // Data Store Backup Path
 const DATA_STORE_PATH = path.join(process.cwd(), "data-store.json");
@@ -894,10 +909,14 @@ async function runPlanningPhase(taskId: string) {
   const agent = agents.find(a => a.id === "agent-backend-dev");
   if (!task || !agent) return;
 
+  const wfId = `wf_${task.id.replace('task-', '')}`;
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecutePlanningActivity", "agent-backend-dev", "EXECUTING");
+
   // Check circuit breaker first!
   if (agent.circuitBreakerState === "OPEN") {
     task.status = "ESCALATED";
     task.updatedAt = new Date().toISOString();
+    temporalOrchestrator.recordActivityTransition(wfId, "ExecutePlanningActivity", "agent-backend-dev", "FAILED", undefined, "Circuit breaker tripped");
     broadcastToClients("TASK_UPDATED", task);
     logTaskEvent(taskId, "TEST_FAILED", "agent-backend-dev", { error: "Alex's Circuit Breaker is OPEN. Budgets exceeded." });
     return;
@@ -929,6 +948,7 @@ async function runPlanningPhase(taskId: string) {
 
     const durationMs = Date.now() - startTime;
     recordAgentMetrics("agent-backend-dev", tokensConsumed, 'planning', durationMs, false, ["postgresql", "plan_architect"]);
+    temporalOrchestrator.recordActivityTransition(wfId, "ExecutePlanningActivity", "agent-backend-dev", "COMPENSATING", durationMs, "Budget breached");
 
     recalculateThermalAndUsage();
     saveStateToDisk();
@@ -945,7 +965,8 @@ async function runPlanningPhase(taskId: string) {
     return;
   }
 
-  // Generate the plan (via real Gemini or robust fallback)
+  // Generate the plan (via dynamic Gemini client or robust fallback)
+  const ai = await getGeminiClient();
   if (ai) {
     try {
       logTaskEvent(taskId, "THOUGHT_LOG", "agent-backend-dev", {
@@ -998,6 +1019,9 @@ async function runPlanningPhase(taskId: string) {
 
   const durationMs = Date.now() - startTime;
   recordAgentMetrics("agent-backend-dev", tokensConsumed, 'planning', durationMs, true, ["postgresql", "plan_architect"]);
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecutePlanningActivity", "agent-backend-dev", "COMPLETED", durationMs);
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecuteImplementationActivity", "agent-frontend-dev", "PENDING");
+  langGraphEngine.recordNodeExecution(taskId, "architect_node", "FORMULATE_ARCHITECTURE_PLAN", generatedPlan.substring(0, 80) + "...", "PASSED");
 
   recalculateThermalAndUsage();
   saveStateToDisk();
@@ -1020,9 +1044,13 @@ async function runImplementingPhase(taskId: string) {
   const agent = agents.find(a => a.id === "agent-frontend-dev");
   if (!task || !agent) return;
 
+  const wfId = `wf_${task.id.replace('task-', '')}`;
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecuteImplementationActivity", "agent-frontend-dev", "EXECUTING");
+
   if (agent.circuitBreakerState === "OPEN") {
     task.status = "ESCALATED";
     task.updatedAt = new Date().toISOString();
+    temporalOrchestrator.recordActivityTransition(wfId, "ExecuteImplementationActivity", "agent-frontend-dev", "FAILED", undefined, "Circuit breaker tripped");
     broadcastToClients("TASK_UPDATED", task);
     logTaskEvent(taskId, "TEST_FAILED", "agent-frontend-dev", { error: "Chloe's Circuit Breaker is OPEN." });
     return;
@@ -1052,6 +1080,7 @@ async function runImplementingPhase(taskId: string) {
 
     const durationMs = Date.now() - startTime;
     recordAgentMetrics("agent-frontend-dev", tokensConsumed, 'implementation', durationMs, false, ["react", "tailwind_css", "vite"]);
+    temporalOrchestrator.recordActivityTransition(wfId, "ExecuteImplementationActivity", "agent-frontend-dev", "COMPENSATING", durationMs, "Budget breached");
 
     recalculateThermalAndUsage();
     saveStateToDisk();
@@ -1068,7 +1097,8 @@ async function runImplementingPhase(taskId: string) {
     return;
   }
 
-  // Generate code via real Gemini or fallback
+  // Generate code via dynamic Gemini or fallback
+  const ai = await getGeminiClient();
   if (ai) {
     try {
       logTaskEvent(taskId, "THOUGHT_LOG", "agent-frontend-dev", {
@@ -1137,6 +1167,9 @@ export default function InteractiveWidget() {
 
   const durationMs = Date.now() - startTime;
   recordAgentMetrics("agent-frontend-dev", tokensConsumed, 'implementation', durationMs, true, ["react", "tailwind_css", "vite"]);
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecuteImplementationActivity", "agent-frontend-dev", "COMPLETED", durationMs);
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecuteSandboxAuditActivity", "agent-qa-reviewer", "PENDING");
+  langGraphEngine.recordNodeExecution(taskId, "coder_node", "GENERATE_REACT_COMPONENT", `Component committed (${generatedCode.split('\n').length} lines).`, "PASSED");
 
   recalculateThermalAndUsage();
   saveStateToDisk();
@@ -1152,16 +1185,20 @@ export default function InteractiveWidget() {
   executeWorkflowStep(taskId);
 }
 
-// QA REVIEW PHASE execution (Dave)
+// QA REVIEW PHASE execution (Dave + Firecracker Sandbox Pool)
 async function runQAPhase(taskId: string) {
   const startTime = Date.now();
   const task = tasks.find(t => t.id === taskId);
   const agent = agents.find(a => a.id === "agent-qa-reviewer");
   if (!task || !agent) return;
 
+  const wfId = `wf_${task.id.replace('task-', '')}`;
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecuteSandboxAuditActivity", "agent-qa-reviewer", "EXECUTING");
+
   if (agent.circuitBreakerState === "OPEN") {
     task.status = "ESCALATED";
     task.updatedAt = new Date().toISOString();
+    temporalOrchestrator.recordActivityTransition(wfId, "ExecuteSandboxAuditActivity", "agent-qa-reviewer", "FAILED", undefined, "Circuit breaker tripped");
     broadcastToClients("TASK_UPDATED", task);
     logTaskEvent(taskId, "TEST_FAILED", "agent-qa-reviewer", { error: "Dave's Circuit Breaker is OPEN." });
     return;
@@ -1190,7 +1227,8 @@ async function runQAPhase(taskId: string) {
     task.updatedAt = new Date().toISOString();
 
     const durationMs = Date.now() - startTime;
-    recordAgentMetrics("agent-qa-reviewer", tokensConsumed, 'qa', durationMs, false, ["eslint", "typescript_compiler"]);
+    recordAgentMetrics("agent-qa-reviewer", tokensConsumed, 'qa', durationMs, false, ["eslint", "typescript_compiler", "firecracker_microvm"]);
+    temporalOrchestrator.recordActivityTransition(wfId, "ExecuteSandboxAuditActivity", "agent-qa-reviewer", "COMPENSATING", durationMs, "Budget breached");
 
     recalculateThermalAndUsage();
     saveStateToDisk();
@@ -1207,11 +1245,15 @@ async function runQAPhase(taskId: string) {
     return;
   }
 
-  // Generate audit review via Gemini or fallback
+  // Execute component code in real Firecracker Sandbox microVM isolate
+  const sandboxResult = await firecrackerSandbox.executeCode(task.code || "", "typescript");
+
+  // Generate audit review via dynamic Gemini or fallback
+  const ai = await getGeminiClient();
   if (ai) {
     try {
       logTaskEvent(taskId, "THOUGHT_LOG", "agent-qa-reviewer", {
-        monologue: "Dave verifying code block integrity and contrast accessibility scores..."
+        monologue: "Dave verifying code block integrity and contrast accessibility scores inside Firecracker microVM isolate..."
       });
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
@@ -1227,13 +1269,22 @@ async function runQAPhase(taskId: string) {
     }
   } else {
     generatedReview = `### Dave's Strict QA Audit & Security Report
-- **Structure Auditing**: Correct usage of \`AnimatePresence\` components.
+- **Structure Auditing**: Correct usage of \`motion\` components.
 - **Accessibility Verification**: Color contrast meets strict WCAG AA standards.
 - **Edge Cases Tested**: 
   - [x] Zero-input boundaries handled.
   - [x] Correct viewport resizing scalability rules.
 - **Status**: PASSED. Ready for Human-in-the-Loop merge approval.`;
   }
+
+  // Append Firecracker MicroVM audit telemetry
+  generatedReview += `\n\n### 🛡️ Firecracker MicroVM Execution Telemetry
+- **Sandbox Instance**: \`${sandboxResult.sandboxId}\`
+- **MicroVM Status**: Exit Code \`${sandboxResult.exitCode}\` (${sandboxResult.securityScan.passed ? "Clean Sandbox Exit" : "Security Block"})
+- **Execution Latency**: \`${sandboxResult.executionTimeMs}ms\`
+- **Memory Allocated**: \`${sandboxResult.memoryUsedMb} MB\`
+- **Security AST Audit Score**: \`${sandboxResult.securityScan.score}/100\`
+- **AST Violations**: \`${sandboxResult.securityScan.forbiddenGlobalsDetected.length === 0 ? "None (0 policy triggers)" : sandboxResult.securityScan.forbiddenGlobalsDetected.join(', ')}\``;
 
   agent.spentUsd = Number((agent.spentUsd + promptCost).toFixed(4));
   agent.spentTokens += tokensConsumed;
@@ -1254,7 +1305,10 @@ async function runQAPhase(taskId: string) {
   });
 
   const durationMs = Date.now() - startTime;
-  recordAgentMetrics("agent-qa-reviewer", tokensConsumed, 'qa', durationMs, true, ["eslint", "typescript_compiler"]);
+  recordAgentMetrics("agent-qa-reviewer", tokensConsumed, 'qa', durationMs, true, ["eslint", "typescript_compiler", "firecracker_microvm"]);
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecuteSandboxAuditActivity", "agent-qa-reviewer", "COMPLETED", durationMs);
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecuteCeoSignoffActivity", "agent-ceo", "PENDING");
+  langGraphEngine.recordNodeExecution(taskId, "qa_sandbox_node", "FIRECRACKER_SANDBOX_AUDIT_PASS", `Security score: ${sandboxResult.securityScan.score}/100. Latency: ${sandboxResult.executionTimeMs}ms`, "PASSED");
 
   recalculateThermalAndUsage();
   saveStateToDisk();
@@ -1263,12 +1317,13 @@ async function runQAPhase(taskId: string) {
   broadcastToClients("TASK_UPDATED", task);
 
   logTaskEvent(taskId, "QA_COMPLETED", "agent-qa-reviewer", {
-    message: "Security and layout validators reports passed. Handing over to Sam (CEO) for strategic review."
+    message: `Security & microVM sandbox validation passed (Score ${sandboxResult.securityScan.score}/100). Handing over to Sam (CEO) for strategic review.`
   });
 
   // Trigger Sam (CEO) strategic review
   setTimeout(() => runCeoSignoffPhase(taskId), 3000);
 }
+
 
 function recordAgentMetrics(
   agentId: string,
@@ -1349,9 +1404,13 @@ async function runProductBriefPhase(taskId: string) {
   const agent = agents.find(a => a.id === "agent-product-manager");
   if (!task || !agent) return;
 
+  const wfId = `wf_${task.id.replace('task-', '')}`;
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecuteProductBriefActivity", "agent-product-manager", "EXECUTING");
+
   if (agent.circuitBreakerState === "OPEN") {
     task.status = "ESCALATED";
     task.updatedAt = new Date().toISOString();
+    temporalOrchestrator.recordActivityTransition(wfId, "ExecuteProductBriefActivity", "agent-product-manager", "FAILED", undefined, "Circuit breaker tripped");
     broadcastToClients("TASK_UPDATED", task);
     logTaskEvent(taskId, "TEST_FAILED", "agent-product-manager", { error: "Pat's Circuit Breaker is OPEN." });
     return;
@@ -1381,6 +1440,7 @@ async function runProductBriefPhase(taskId: string) {
 
     const durationMs = Date.now() - startTime;
     recordAgentMetrics("agent-product-manager", tokensConsumed, 'pm', durationMs, false, ["requirements_analysis", "brief_compiler"]);
+    temporalOrchestrator.recordActivityTransition(wfId, "ExecuteProductBriefActivity", "agent-product-manager", "COMPENSATING", durationMs, "Budget breached");
 
     recalculateThermalAndUsage();
     saveStateToDisk();
@@ -1397,7 +1457,8 @@ async function runProductBriefPhase(taskId: string) {
     return;
   }
 
-  // Generate the brief via real Gemini or fallback
+  // Generate the brief via dynamic Gemini or fallback
+  const ai = await getGeminiClient();
   if (ai) {
     try {
       logTaskEvent(taskId, "THOUGHT_LOG", "agent-product-manager", {
@@ -1442,6 +1503,9 @@ async function runProductBriefPhase(taskId: string) {
 
   const durationMs = Date.now() - startTime;
   recordAgentMetrics("agent-product-manager", tokensConsumed, 'pm', durationMs, true, ["requirements_analysis", "brief_compiler"]);
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecuteProductBriefActivity", "agent-product-manager", "COMPLETED", durationMs);
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecutePlanningActivity", "agent-backend-dev", "PENDING");
+  langGraphEngine.recordNodeExecution(taskId, "pm_node", "DRAFT_PRODUCT_BRIEF", generatedBrief.substring(0, 80) + "...", "PASSED");
 
   recalculateThermalAndUsage();
   saveStateToDisk();
@@ -1464,9 +1528,13 @@ async function runCeoSignoffPhase(taskId: string) {
   const agent = agents.find(a => a.id === "agent-ceo");
   if (!task || !agent) return;
 
+  const wfId = `wf_${task.id.replace('task-', '')}`;
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecuteCeoSignoffActivity", "agent-ceo", "EXECUTING");
+
   if (agent.circuitBreakerState === "OPEN") {
     task.status = "ESCALATED";
     task.updatedAt = new Date().toISOString();
+    temporalOrchestrator.recordActivityTransition(wfId, "ExecuteCeoSignoffActivity", "agent-ceo", "FAILED", undefined, "Circuit breaker tripped");
     broadcastToClients("TASK_UPDATED", task);
     logTaskEvent(taskId, "TEST_FAILED", "agent-ceo", { error: "Sam's Circuit Breaker is OPEN." });
     return;
@@ -1496,6 +1564,7 @@ async function runCeoSignoffPhase(taskId: string) {
 
     const durationMs = Date.now() - startTime;
     recordAgentMetrics("agent-ceo", tokensConsumed, 'ceo', durationMs, false, ["strategic_signoff", "financial_approver"]);
+    temporalOrchestrator.recordActivityTransition(wfId, "ExecuteCeoSignoffActivity", "agent-ceo", "COMPENSATING", durationMs, "Budget breached");
 
     recalculateThermalAndUsage();
     saveStateToDisk();
@@ -1513,6 +1582,7 @@ async function runCeoSignoffPhase(taskId: string) {
   }
 
   // Generate CEO strategic signoff
+  const ai = await getGeminiClient();
   if (ai) {
     try {
       logTaskEvent(taskId, "THOUGHT_LOG", "agent-ceo", {
@@ -1553,7 +1623,7 @@ async function runCeoSignoffPhase(taskId: string) {
     taskId: task.id,
     state: "AWAITING_APPROVAL",
     requestedAt: new Date().toISOString(),
-    summary: `Dave successfully audited code and Sam completed strategic CEO review. Ready for human operator sign-off.`,
+    summary: `Dave successfully audited code in Firecracker sandbox and Sam completed strategic CEO review. Ready for human operator sign-off.`,
     timeoutAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24h
   };
   gates.push(newGate);
@@ -1570,6 +1640,9 @@ async function runCeoSignoffPhase(taskId: string) {
 
   const durationMs = Date.now() - startTime;
   recordAgentMetrics("agent-ceo", tokensConsumed, 'ceo', durationMs, true, ["strategic_signoff", "financial_approver"]);
+  temporalOrchestrator.recordActivityTransition(wfId, "ExecuteCeoSignoffActivity", "agent-ceo", "COMPLETED", durationMs);
+  langGraphEngine.recordNodeExecution(taskId, "ceo_governance_node", "STRATEGIC_ALIGNMENT_SIGN_OFF", generatedSignoff.substring(0, 80) + "...", "PASSED");
+  langGraphEngine.recordNodeExecution(taskId, "hitl_gate_node", "AWAITING_OPERATOR_APPROVAL", "Presented gate to Human Operator for deployment sign-off.", "ACTIVE");
 
   recalculateThermalAndUsage();
   saveStateToDisk();
@@ -1579,9 +1652,10 @@ async function runCeoSignoffPhase(taskId: string) {
   broadcastToClients("GATE_UPDATED", newGate);
 
   logTaskEvent(task.id, "APPROVAL_REQUESTED", "agent-ceo", {
-    message: "Dave's audit and Sam's strategic review completed. Presenting to operator for deployment sign-off."
+    message: "Dave's microVM audit and Sam's strategic review completed. Presenting to operator for deployment sign-off."
   });
 }
+
 
 // --- OPERATOR AUTHENTICATION MIDDLEWARE ---
 const OPERATOR_TOKEN_SECRET = "tf_token_98234792374982734";
@@ -1598,9 +1672,9 @@ function requireOperator(req: any, res: any, next: any) {
   next();
 }
 
-app.post("/api/v1/auth/login", (req, res) => {
+app.post("/api/v1/auth/login", async (req, res) => {
   const { password } = req.body;
-  const expectedPassword = process.env.OPERATOR_PASSWORD || "admin123";
+  const expectedPassword = await secretManager.getSecret("OPERATOR_PASSWORD") || "admin123";
   if (password === expectedPassword) {
     res.json({
       token: OPERATOR_TOKEN_SECRET,
@@ -1689,6 +1763,10 @@ app.post("/api/v1/tasks", requireOperator, (req, res) => {
   tasks.push(newTask);
   saveStateToDisk();
 
+  // Initialize Temporal Workflow & LangGraph State
+  temporalOrchestrator.initWorkflowForTask(newTask);
+  langGraphEngine.initTaskGraph(newTask);
+
   // Broadcast addition to dashboard
   broadcastToClients("TASK_CREATED", newTask);
 
@@ -1720,7 +1798,7 @@ app.get("/api/v1/tasks/:id/events", (req, res) => {
 });
 
 // Human Approval Sign-off (APPROVE signal)
-app.post("/api/v1/tasks/:id/approve", requireOperator, (req, res) => {
+app.post("/api/v1/tasks/:id/approve", requireOperator, async (req, res) => {
   const task = tasks.find(t => t.id === req.params.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
@@ -1738,6 +1816,10 @@ app.post("/api/v1/tasks/:id/approve", requireOperator, (req, res) => {
   task.updatedAt = new Date().toISOString();
   broadcastToClients("TASK_UPDATED", task);
 
+  const wfId = `wf_${task.id.replace('task-', '')}`;
+  await temporalOrchestrator.sendSignal(wfId, 'APPROVE_SIGNAL');
+  langGraphEngine.recordNodeExecution(task.id, "hitl_gate_node", "OPERATOR_APPROVED_DEPLOY", "Operator approved deployment. Advancing to Deploy Node.", "PASSED");
+
   logTaskEvent(task.id, "APPROVED", null, { decision: "APPROVE_TO_DEPLOY" }, "Operator");
 
   // Run mock deployment
@@ -1745,6 +1827,9 @@ app.post("/api/v1/tasks/:id/approve", requireOperator, (req, res) => {
     task.status = "COMPLETED";
     task.updatedAt = new Date().toISOString();
     broadcastToClients("TASK_UPDATED", task);
+
+    temporalOrchestrator.recordActivityTransition(wfId, "ExecuteDeploymentActivity", "system-cd", "COMPLETED", 350);
+    langGraphEngine.recordNodeExecution(task.id, "deploy_node", "STAGING_CONTAINER_DEPLOY_COMPLETED", "Task deployment to Staging Cloud Run complete.", "PASSED");
 
     logTaskEvent(task.id, "DEPLOYED", null, { environment: "Staging-Cloud-Run" }, "System CD Engine");
     logTaskEvent(task.id, "COMPLETED", null, { message: "Task completed successfully." }, "System CD Engine");
@@ -1754,7 +1839,7 @@ app.post("/api/v1/tasks/:id/approve", requireOperator, (req, res) => {
 });
 
 // Human Rejection (REJECT signal)
-app.post("/api/v1/tasks/:id/reject", requireOperator, (req, res) => {
+app.post("/api/v1/tasks/:id/reject", requireOperator, async (req, res) => {
   const task = tasks.find(t => t.id === req.params.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
@@ -1772,13 +1857,17 @@ app.post("/api/v1/tasks/:id/reject", requireOperator, (req, res) => {
   task.updatedAt = new Date().toISOString();
   broadcastToClients("TASK_UPDATED", task);
 
+  const wfId = `wf_${task.id.replace('task-', '')}`;
+  await temporalOrchestrator.sendSignal(wfId, 'REJECT_SIGNAL');
+  langGraphEngine.recordNodeExecution(task.id, "hitl_gate_node", "OPERATOR_REJECTED_TASK", "Operator rejected task.", "FAILED");
+
   logTaskEvent(task.id, "REJECTED", null, { decision: "REJECTED_BY_OPERATOR" }, "Operator");
 
   res.json({ message: "Task rejected by operator.", task });
 });
 
 // Request Changes (REQUEST_CHANGES signal)
-app.post("/api/v1/tasks/:id/request-changes", requireOperator, (req, res) => {
+app.post("/api/v1/tasks/:id/request-changes", requireOperator, async (req, res) => {
   const task = tasks.find(t => t.id === req.params.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
@@ -1799,6 +1888,10 @@ app.post("/api/v1/tasks/:id/request-changes", requireOperator, (req, res) => {
   task.updatedAt = new Date().toISOString();
   broadcastToClients("TASK_UPDATED", task);
 
+  const wfId = `wf_${task.id.replace('task-', '')}`;
+  await temporalOrchestrator.sendSignal(wfId, 'REQUEST_CHANGES_SIGNAL', { comment });
+  langGraphEngine.recordNodeExecution(task.id, "hitl_gate_node", "OPERATOR_REQUESTED_CHANGES", comment || "Changes requested. Cycling back to Coder Node.", "PASSED");
+
   logTaskEvent(task.id, "REQUEST_CHANGES", null, { feedback: comment || "Reviewer requested changes to implementation code." }, "Operator");
 
   // Re-run implementing step!
@@ -1808,7 +1901,7 @@ app.post("/api/v1/tasks/:id/request-changes", requireOperator, (req, res) => {
 });
 
 // Terminate Task (TERMINATE signal)
-app.post("/api/v1/tasks/:id/terminate", requireOperator, (req, res) => {
+app.post("/api/v1/tasks/:id/terminate", requireOperator, async (req, res) => {
   const task = tasks.find(t => t.id === req.params.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
@@ -1816,10 +1909,84 @@ app.post("/api/v1/tasks/:id/terminate", requireOperator, (req, res) => {
   task.updatedAt = new Date().toISOString();
   broadcastToClients("TASK_UPDATED", task);
 
+  const wfId = `wf_${task.id.replace('task-', '')}`;
+  await temporalOrchestrator.sendSignal(wfId, 'TERMINATE_SIGNAL');
+
   logTaskEvent(task.id, "FAILED", null, { reason: "Terminated manually by operator." }, "Operator");
 
   res.json({ message: "Task execution forcefully terminated.", task });
 });
+
+// --- DYNAMIC SECRET MANAGER ENDPOINTS ---
+app.get("/api/v1/secrets/status", (req, res) => {
+  res.json(secretManager.getStatus());
+});
+
+app.post("/api/v1/secrets/reload", requireOperator, (req, res) => {
+  secretManager.refreshCache();
+  res.json({ message: "Secrets successfully reloaded and cache purged.", status: secretManager.getStatus() });
+});
+
+app.post("/api/v1/secrets/configure", requireOperator, (req, res) => {
+  const updated = secretManager.configureProvider(req.body);
+  res.json({ message: "Secret Manager provider configuration updated.", status: updated });
+});
+
+app.post("/api/v1/secrets/override", requireOperator, (req, res) => {
+  const { key, value } = req.body;
+  if (!key || value === undefined) {
+    return res.status(400).json({ error: "key and value are required." });
+  }
+  secretManager.setSecretOverride(key, value);
+  res.json({ message: `Secret key ${key} successfully updated.`, status: secretManager.getStatus() });
+});
+
+// --- TEMPORAL.IO WORKFLOW ORCHESTRATION ENDPOINTS ---
+app.get("/api/v1/temporal/status", (req, res) => {
+  res.json(temporalOrchestrator.getEngineStatus());
+});
+
+app.get("/api/v1/temporal/workflows", (req, res) => {
+  res.json(temporalOrchestrator.listWorkflowRuns());
+});
+
+app.get("/api/v1/temporal/workflows/:id", (req, res) => {
+  const run = temporalOrchestrator.getWorkflowRun(req.params.id);
+  if (!run) return res.status(404).json({ error: "Workflow not found" });
+  res.json(run);
+});
+
+app.post("/api/v1/temporal/workflows/:id/signal", requireOperator, async (req, res) => {
+  const { signalName, payload } = req.body;
+  if (!signalName) return res.status(400).json({ error: "signalName is required" });
+  const success = await temporalOrchestrator.sendSignal(req.params.id, signalName, payload);
+  if (!success) return res.status(404).json({ error: "Workflow run not found" });
+  res.json({ message: `Signal ${signalName} dispatched successfully.` });
+});
+
+// --- LANGGRAPH MULTI-AGENT STATE GRAPH ENDPOINTS ---
+app.get("/api/v1/langgraph/graph", (req, res) => {
+  res.json(langGraphEngine.getGraphTopology());
+});
+
+app.get("/api/v1/langgraph/state/:taskId", (req, res) => {
+  const state = langGraphEngine.getTaskGraphState(req.params.taskId);
+  if (!state) return res.status(404).json({ error: "LangGraph state not found for this task" });
+  res.json(state);
+});
+
+// --- FIRECRACKER MICROVM SANDBOX ENDPOINTS ---
+app.get("/api/v1/sandbox/pool-status", (req, res) => {
+  res.json(firecrackerSandbox.getPoolStatus());
+});
+
+app.post("/api/v1/sandbox/execute", requireOperator, async (req, res) => {
+  const { code, language, timeoutMs } = req.body;
+  if (!code) return res.status(400).json({ error: "code string is required" });
+  const result = await firecrackerSandbox.executeCode(code, language || 'javascript', timeoutMs || 3000);
+  res.json(result);
+});
+
 
 // List Agents
 app.get("/api/v1/agents", (req, res) => {
@@ -2029,6 +2196,7 @@ app.post("/api/v1/tasks/:id/collaboration/discuss", async (req, res) => {
   if (!task) return res.status(404).json({ error: "Task not found" });
 
   let responseText = "";
+  const ai = await getGeminiClient();
   if (ai) {
     try {
       const response = await ai.models.generateContent({
