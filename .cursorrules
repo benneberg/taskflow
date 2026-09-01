@@ -1,0 +1,23 @@
+# TaskFlow AI — Agentic Operating System Guidelines
+
+## Core Stack & Paradigm
+- Language: TypeScript 5.8 (Strict mode, no implicit any, standard Enums only)
+- Runtime: Node.js 22 LTS (Express 4 API + SSE backend, bundled to CommonJS `dist/server.cjs`)
+- Frontend: React 19 (Hooks, Functional Components, `@tailwindcss/vite` v4, `motion/react`, `lucide-react`)
+- Testing: Automated assertion harness in `src/tests/run-assertions.ts` executed via `tsx`
+
+## Security & Secrets
+- NEVER expose `GEMINI_API_KEY`, passwords, or tokens to the browser client or in client-side Vite bundles (`import.meta.env`).
+- Always resolve secrets through `src/server/secret-manager.ts` using `getGeminiClient()` or `secretManager.getSecret()`.
+- Guard all state-mutating Express REST routes with `requireOperator` middleware.
+
+## Concurrency & Data Persistence
+- Maintain Optimistic Concurrency Control (OCC): Every state change MUST increment transaction ledger versions monotonically.
+- Ensure all file writes to `data-store.json` pass through the atomic async queue lock in `server.ts` to prevent race conditions.
+- Keep SSE connections clean with heartbeat intervals and auto-prune disconnected clients to prevent memory leaks.
+
+## Coding Style & UI Rules
+- Do NOT use unrequested gradient cards, glassmorphic glows, or purple/cyan cliches.
+- Maintain high-contrast, clean typography pairing and exact WCAG AA color accessibility.
+- All icons must be imported from `lucide-react`.
+- When writing components, place types in `src/types.ts` and keep components modular.

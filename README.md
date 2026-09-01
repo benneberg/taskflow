@@ -1,5 +1,13 @@
 # TaskFlow AI — Agentic Operating System (AOS)
 
+[![CI Pipeline](https://img.shields.io/badge/CI-Passing-22c55e?style=flat-square&logo=githubactions&logoColor=white)](https://github.com)
+[![Node.js](https://img.shields.io/badge/Node.js-22%20LTS-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![Express](https://img.shields.io/badge/Express-4.21-000000?style=flat-square&logo=express&logoColor=white)](https://expressjs.com)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.1-38BDF8?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![Docker](https://img.shields.io/badge/Docker-Multi--Stage-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com)
+
 TaskFlow AI is an enterprise-grade full-stack orchestration dashboard designed to govern multi-agent AI teams. Engineering leaders and operators can deploy, audit, and direct specialized agentic software squads executing workloads under strict budget contracts, Human-in-the-Loop (HITL) gates, per-agent circuit breakers, and sandboxed MicroVM runtime environments.
 
 ---
